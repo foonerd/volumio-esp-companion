@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "core",
+    "hal",
+]
+# Each firmware crate is a workspace of its own: an ESP-IDF target, its own
+# toolchain channel and its own sdkconfig. Built from its directory.
+exclude = [
+    "firmware/waveshare-esp32-c5-touch-lcd-28",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/foonerd/volumio-esp-companion"
+publish = false
+
+# One set of lints for every crate; check.sh denies warnings.
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+type_complexity = "allow"
+too_many_arguments = "allow"

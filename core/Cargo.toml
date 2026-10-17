@@ -1,0 +1,13 @@
+[package]
+name = "companion-core"
+description = "Volumio ESP Companion: the pages, the surface, the player state model and the Volumio protocol types, free of any platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
