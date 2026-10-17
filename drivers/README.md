@@ -12,4 +12,4 @@ A driver crate:
 
 SPI display controllers of the ST77xx and ILI9xxx families need no crate here: mipidsi already drives them and the firmware crate uses its builder.
 
-None exists yet. The first will be `cst3530`, the touch controller of the three Waveshare 2.8" boards.
+None exists yet. The first will be `ch32v003-expander`, the IO expander of the three Waveshare 2.8" boards, which holds their display and touch resets, the backlight and the amplifier enable, so it comes before anything can light; the second `cst3530`, their touch controller.

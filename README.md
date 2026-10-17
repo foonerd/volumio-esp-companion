@@ -4,7 +4,11 @@ Now playing, transport, volume and album art on an ESP32 touch panel, talking to
 
 It grows out of [rpi-waveshare28](https://github.com/foonerd/rpi-waveshare28), the Raspberry Pi runtime for the Waveshare 2.8" SPI LCD. Peter of [PIXIS](https://github.com/PIXISREPO/VOLUMIO-4-TOUCH), who tested that runtime on the PIXIS CB-1, asked for the same on the Waveshare ESP32-C5-Touch-LCD-2.8 and sent the first board to start tinkering with ([the Pi thread](https://community.volumio.com/t/re-re-pi-3a-volumio-waveshare-2-8-spi-lcd-display-is-working-cst328-touch-still-wip-help-appreciated/77681), [the ESP32 thread](https://community.volumio.com/t/re-2-8inch-esp32-waveshare-panel/77872)). Thank you, Peter.
 
-**Where the project stands.** Pre-alpha. The toolchain is proven for the ESP32-C5: the firmware for the Waveshare ESP32-C5-Touch-LCD-2.8 builds std Rust on ESP-IDF and reports the chip, the PSRAM, a dual-band Wi-Fi scan and a connection. Nothing draws on a panel yet. The [wiki](https://github.com/foonerd/volumio-esp-companion/wiki) has the [boards](https://github.com/foonerd/volumio-esp-companion/wiki/Boards) and the [build](https://github.com/foonerd/volumio-esp-companion/wiki/Building).
+**Where the project stands.** Pre-alpha. The toolchain is proven for the ESP32-C5: the firmware for the Waveshare ESP32-C5-Touch-LCD-2.8 builds std Rust on ESP-IDF and reports the chip, the PSRAM, a dual-band Wi-Fi scan and a connection. Nothing draws on a panel yet. The [wiki](https://github.com/foonerd/volumio-esp-companion/wiki) has the [connections](https://github.com/foonerd/volumio-esp-companion/wiki/Connections), the [boards](https://github.com/foonerd/volumio-esp-companion/wiki/Boards) and the [build](https://github.com/foonerd/volumio-esp-companion/wiki/Building).
+
+<p align="center"><img src="https://raw.githubusercontent.com/wiki/foonerd/volumio-esp-companion/images/connections/network.png" width="760" alt="The player and the panel on one network, no cable between them"></p>
+
+The panel is a client of the player over the LAN, as the Volumio apps are: it finds the player by mDNS, polls its state over REST, sends transport and volume, fetches the art. Nothing is installed on the player.
 
 ## Boards
 
@@ -18,6 +22,22 @@ The three Waveshare siblings come first; any vendor's ESP32 display board is in 
 
 ## What is in the box
 
+```mermaid
+flowchart LR
+    subgraph LAN
+        V[Volumio player<br/>REST on :3000, mDNS _Volumio._tcp] <-- Wi-Fi --> B
+        subgraph B[ESP32 display board]
+            direction TB
+            FW[firmware/&lt;vendor&gt;-&lt;model&gt;<br/>pins, bring-up, capabilities] --> RT[runtime<br/>loop, Volumio client, art]
+            RT --> C[core<br/>pages, surface, state]
+            FW --> D[drivers<br/>touch, expander, codec]
+            FW --> P[platform/esp-idf<br/>Wi-Fi, NVS, mDNS, HTTP]
+            C -- DrawTarget --> LCD[(panel)]
+            D -- hal::Touch --> RT
+        end
+    end
+```
+
 | Layer | Where | Holds | Builds on |
 | --- | --- | --- | --- |
 | core | `core/` | The pages, the drawing surface, the player state model and the Volumio protocol types. `no_std`, no `unsafe`, no platform crate. | host and device |
@@ -28,9 +48,30 @@ The three Waveshare siblings come first; any vendor's ESP32 display board is in 
 | firmware | `firmware/<vendor>-<model>/` | The device. One crate per board, a workspace of its own with its target, toolchain, sdkconfig and partition table; the pin map, the bring-up, the expanders, the capabilities record; a thin `main.rs` that builds the board and hands it to the runtime. Its build is the image you flash. | that device |
 | sim | `sim/` | The runtime on a desktop window, talking to a real player, for page work without a board. | host |
 
-Today: `core/` and `hal/` as the enforced contracts, empty of code until the port; `firmware/waveshare-esp32-c5-touch-lcd-28/` boots its board and reports the chip, the PSRAM and the Wi-Fi. `drivers/`, `runtime/`, `platform/` and `sim/` arrive with the port, in that order.
+Today: `core/` and `hal/` as the enforced contracts, empty of code until the port; `firmware/waveshare-esp32-c5-touch-lcd-28/` boots its board and reports the chip, the PSRAM and the Wi-Fi. `drivers/`, `runtime/`, `platform/` and `sim/` arrive with the port, in that order; the first driver is the CH32V003 IO expander, which on the Waveshare boards holds the display and touch resets and the backlight, so nothing lights before it.
 
-The layers are the point. A new board is one crate under `firmware/`: its pins, its bring-up order and a filled-in capabilities record, and every page, the touch handling and the Volumio client come with it. A new controller chip is one crate under `drivers/`, written once against embedded-hal, and every board that carries the chip uses it. Nothing in `core/` knows a vendor's name.
+```mermaid
+flowchart TB
+    core[core · no_std · pages, surface, state, protocol types]
+    hal[hal · no_std · traits + capabilities]
+    drivers[drivers/&lt;chip&gt; · no_std · embedded-hal]
+    runtime[runtime · std, portable · the application]
+    platform[platform/esp-idf · std + esp-idf-svc]
+    firmware[firmware/&lt;vendor&gt;-&lt;model&gt; · the device, the image]
+    sim[sim · the runtime on a desktop window]
+
+    core --> hal
+    runtime --> core
+    runtime --> hal
+    drivers --> hal
+    platform --> hal
+    firmware --> runtime
+    firmware --> drivers
+    firmware --> platform
+    sim --> runtime
+```
+
+Arrows read "depends on". Nothing above `runtime` knows ESP-IDF; nothing in `core` or `hal` knows std. The layers are the point. A new board is one crate under `firmware/`: its pins, its bring-up order and a filled-in capabilities record, and every page, the touch handling and the Volumio client come with it. A new controller chip is one crate under `drivers/`, written once against embedded-hal, and every board that carries the chip uses it. Nothing in `core/` knows a vendor's name.
 
 ## Build
 
