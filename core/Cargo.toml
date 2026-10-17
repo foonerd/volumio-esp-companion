@@ -11,3 +11,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+companion-hal = { path = "../hal" }
+embedded-graphics = "0.8"
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }

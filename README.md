@@ -48,7 +48,7 @@ flowchart LR
 | firmware | `firmware/<vendor>-<model>/` | The device. One crate per board, a workspace of its own with its target, toolchain, sdkconfig and partition table; the pin map, the bring-up, the expanders, the capabilities record; a thin `main.rs` that builds the board and hands it to the runtime. Its build is the image you flash. | that device |
 | sim | `sim/` | The runtime on a desktop window, talking to a real player, for page work without a board. | host |
 
-Today: `core/` and `hal/` as the enforced contracts, empty of code until the port; `firmware/waveshare-esp32-c5-touch-lcd-28/` boots its board and reports the chip, the PSRAM and the Wi-Fi. `drivers/`, `runtime/`, `platform/` and `sim/` arrive with the port, in that order; the first driver is the CH32V003 IO expander, which on the Waveshare boards holds the display and touch resets and the backlight, so nothing lights before it.
+Today: `hal/` holds the traits and the capabilities record; `core/` holds the pages, the surfaces and the player state model, carried over from rpi-waveshare28 with their tests and building for bare-metal RISC-V; `firmware/waveshare-esp32-c5-touch-lcd-28/` boots its board and reports the chip, the PSRAM and the Wi-Fi. `drivers/`, `runtime/`, `platform/` and `sim/` arrive next, in that order; the first driver is the CH32V003 IO expander, which on the Waveshare boards holds the display and touch resets and the backlight, so nothing lights before it.
 
 ```mermaid
 flowchart TB
@@ -78,7 +78,7 @@ Arrows read "depends on". Nothing above `runtime` knows ESP-IDF; nothing in `cor
 The host workspace (`core`, `hal`, the drivers) builds on stable Rust, pinned by `rust-toolchain.toml`. Each firmware crate pins its own channel: ESP-IDF std targets need nightly with `rust-src`, plus `ldproxy` and python3 with esptool 5; the first build fetches ESP-IDF and the chip's toolchain.
 
 ```sh
-scripts/check.sh                                            # format, clippy, tests, docs, scripts, then every firmware built
+scripts/check.sh                                            # format, clippy, tests, docs, no_std on bare metal, scripts, then every firmware built
 (cd firmware/waveshare-esp32-c5-touch-lcd-28 && cargo build --release)
 scripts/image.sh firmware/waveshare-esp32-c5-touch-lcd-28   # the merged image and its parts into dist/
 ```
