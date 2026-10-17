@@ -1,0 +1,31 @@
+[package]
+name = "waveshare-esp32-c5-touch-lcd-28"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/foonerd/volumio-esp-companion"
+publish = false
+description = "Volumio ESP Companion firmware for the Waveshare ESP32-C5-Touch-LCD-2.8"
+
+[[bin]]
+name = "waveshare-esp32-c5-touch-lcd-28"
+harness = false
+
+# A workspace of its own: ESP-IDF target, nightly channel, own sdkconfig.
+[workspace]
+
+[dependencies]
+esp-idf-svc = { version = "0.53", features = ["std", "binstart"] }
+log = "0.4"
+anyhow = "1"
+
+[build-dependencies]
+embuild = "0.33.5"
+
+[profile.release]
+opt-level = "s"
+debug = false
+
+[profile.dev]
+opt-level = "z"
+debug = true
