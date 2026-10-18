@@ -20,5 +20,5 @@ pub mod nvs;
 
 pub use card::Card;
 pub use http::Http;
-pub use net::WifiNet;
+pub use net::{ApHint, WifiNet};
 pub use nvs::{NvsError, NvsStore};

@@ -6,6 +6,7 @@
 //! firmware runs one, shows as the hotspot.
 
 use companion_hal::{Address, HostInfo, Hotspot, Link, NetworkStatus};
+use core::time::Duration;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::modem::Modem;
 use esp_idf_svc::ipv4::{
@@ -16,13 +17,31 @@ use esp_idf_svc::netif::{EspNetif, NetifConfiguration, NetifStack};
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys::{EspError, ESP_ERR_INVALID_ARG};
 use esp_idf_svc::wifi::{
-    AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi, WifiDriver,
+    AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi, ScanMethod, WifiDriver,
 };
 
 /// The Wi-Fi, started, as the application's view of the network.
 pub struct WifiNet<'d> {
     wifi: BlockingWifi<EspWifi<'d>>,
 }
+
+/// Where a station last found its access point. Offered back to
+/// [`WifiNet::connect`], it lets the driver go straight to that channel and
+/// BSSID instead of searching both bands, which is most of a cold boot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ApHint {
+    /// The primary channel.
+    pub channel: u8,
+    /// The access point's MAC.
+    pub bssid: [u8; 6],
+}
+
+/// How long a full search may take before `connect` gives up. The
+/// driver's own figure for both bands is around thirteen seconds.
+const SEARCH_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long a hinted join may take: the AP is either there or it has
+/// moved, and the caller falls back to the search.
+const HINTED_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl<'d> WifiNet<'d> {
     /// Take the modem, start the driver in station mode with no network
@@ -62,8 +81,18 @@ impl<'d> WifiNet<'d> {
     }
 
     /// Join `ssid` and wait for an address. An empty password is an open
-    /// network.
-    pub fn connect(&mut self, ssid: &str, password: &str) -> Result<(), EspError> {
+    /// network. Without `hint` the driver scans every channel on both bands
+    /// and joins the strongest match, which takes it about thirteen seconds
+    /// and is worth it once. With `hint` it scans from that channel for
+    /// that BSSID and stops at the first sight of it, in about a second;
+    /// after [`HINTED_TIMEOUT`] it has moved and the caller falls back to
+    /// the search. A failed hinted join leaves the driver ready for one.
+    pub fn connect(
+        &mut self,
+        ssid: &str,
+        password: &str,
+        hint: Option<ApHint>,
+    ) -> Result<(), EspError> {
         let auth = if password.is_empty() {
             AuthMethod::None
         } else {
@@ -77,9 +106,34 @@ impl<'d> WifiNet<'d> {
         if conf.ssid.push_str(ssid).is_err() || conf.password.push_str(password).is_err() {
             return Err(EspError::from_infallible::<{ ESP_ERR_INVALID_ARG }>());
         }
+        let timeout = match hint {
+            Some(h) => {
+                conf.channel = Some(h.channel);
+                conf.bssid = Some(h.bssid);
+                // The default is a complete scan of both bands, the thirteen
+                // seconds the hint exists to save.
+                conf.scan_method = ScanMethod::FastScan;
+                HINTED_TIMEOUT
+            }
+            None => SEARCH_TIMEOUT,
+        };
+        // A previous attempt may still be pending in the driver.
+        let _ = self.wifi.wifi_mut().disconnect();
         self.wifi.set_configuration(&Configuration::Client(conf))?;
-        self.wifi.connect()?;
+        self.wifi.wifi_mut().connect()?;
+        self.wifi.wifi_wait_while(
+            || self.wifi.wifi().is_connected().map(|c| !c),
+            Some(timeout),
+        )?;
         self.wifi.wait_netif_up()
+    }
+
+    /// The access point the station is joined to, as a hint for next time.
+    pub fn joined_ap(&self) -> Option<ApHint> {
+        self.wifi.wifi().get_ap_info().ok().map(|ap| ApHint {
+            channel: ap.channel,
+            bssid: ap.bssid,
+        })
     }
 
     /// The driver, for what the application does not need: scans, band
