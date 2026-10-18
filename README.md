@@ -48,7 +48,7 @@ flowchart LR
 | firmware | `firmware/<vendor>-<model>/` | The device. One crate per board, a workspace of its own with its target, toolchain, sdkconfig and partition table; the pin map, the bring-up, the expanders, the capabilities record; a thin `main.rs` that builds the board and hands it to the runtime. Its build is the image you flash. | that device |
 | sim | `sim/` | The application on a desktop window or in a PNG, talking to a real player, for page work without a board. The host's HTTP, interfaces and a thread for art stand in for the device. | host |
 
-Today: `hal/` holds the traits and the capabilities record; `core/` holds the pages, the surfaces and the player state model; `runtime/` holds the application, carried over from rpi-waveshare28 with its rules intact and reshaped so a device steps it; all three with their tests, building for bare-metal RISC-V; `sim/` runs that application on a desktop against a real player; `firmware/waveshare-esp32-c5-touch-lcd-28/` boots its board and reports the chip, the PSRAM and the Wi-Fi. `drivers/` and `platform/` arrive next, in that order; the first driver is the CH32V003 IO expander, which on the Waveshare boards holds the display and touch resets and the backlight, so nothing lights before it.
+Today: `hal/` holds the traits and the capabilities record; `core/` holds the pages, the surfaces and the player state model; `runtime/` holds the application, carried over from rpi-waveshare28 with its rules intact and reshaped so a device steps it; `drivers/` holds the CH32V003 IO expander and the CST3530 touch controller; all of it with its tests, building for bare-metal RISC-V; `sim/` runs the application on a desktop against a real player; `firmware/waveshare-esp32-c5-touch-lcd-28/` boots its board and reports the chip, the PSRAM and the Wi-Fi. Next: `platform/esp-idf`, then the firmware brings the panel up through the expander and hands the board to the runtime.
 
 ```mermaid
 flowchart TB
@@ -92,12 +92,12 @@ cargo run -p companion-sim --no-default-features -- --player http://volumio.loca
 
 The mouse is the finger; Escape quits. `--help` lists the settings it takes, which are the same keys a device reads from its store.
 
-`check.sh` refuses to pass on a machine without the ESP toolchain rather than report a pass that never built the product. Without the toolchain on the machine, the builder image of `scripts/builder/Dockerfile` has everything; the first build fetches ESP-IDF into the firmware crate's `.embuild/`, which the mounted checkout keeps:
+`check.sh` refuses to pass on a machine without the ESP toolchain rather than report a pass that never built the product. Without the toolchain on the machine, the builder image of `scripts/builder/Dockerfile` has everything; the first build fetches ESP-IDF into the firmware crate's `.embuild/`, which the mounted checkout keeps. The checkout is mounted at its own path because ESP-IDF's build records absolute paths under `target/`, and a tree built under one path will not rebuild under another:
 
 ```sh
 docker build -t companion-builder -f scripts/builder/Dockerfile .
-docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work companion-builder scripts/check.sh
-docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work companion-builder scripts/image.sh firmware/waveshare-esp32-c5-touch-lcd-28
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:$PWD" -w "$PWD" companion-builder scripts/check.sh
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:$PWD" -w "$PWD" companion-builder scripts/image.sh firmware/waveshare-esp32-c5-touch-lcd-28
 ```
 
 Each firmware crate's README has its flash command.

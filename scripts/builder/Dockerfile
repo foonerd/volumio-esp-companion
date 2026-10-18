@@ -11,7 +11,13 @@
 # On a developer's machine, from the repository's root:
 #
 #   docker build -t companion-builder -f scripts/builder/Dockerfile .
-#   docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work companion-builder scripts/check.sh
+#   docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:$PWD" -w "$PWD" companion-builder scripts/check.sh
+#
+# The checkout is mounted at its own path, not at /work: ESP-IDF's CMake
+# build under the firmware crate's target/ records absolute paths, and a
+# tree built under one path fails to rebuild under another. With the same
+# path inside and out, the host's cargo and the container's share one
+# target/ and one .embuild/ without tripping each other.
 #
 # The context is the repository's root, of which the build reads only the
 # toolchain files (see Dockerfile.dockerignore).

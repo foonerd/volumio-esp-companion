@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
     "core",
+    "drivers/ch32v003-expander",
+    "drivers/cst3530",
     "hal",
     "runtime",
     "sim",

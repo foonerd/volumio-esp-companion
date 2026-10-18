@@ -36,15 +36,15 @@ cargo run -q -p companion-sim --no-default-features -- --player http://127.0.0.1
 test -s target/sim-status.png
 
 echo "== no_std, on bare metal"
-# core, hal and runtime claim no_std; proving it means building them for a
-# target that has no std at all. The RISC-V target the C5 and C6 firmware
-# use, minus ESP-IDF.
+# core, hal, runtime and the drivers claim no_std; proving it means building
+# them for a target that has no std at all. The RISC-V target the C5 and C6
+# firmware use, minus ESP-IDF.
 bare=riscv32imac-unknown-none-elf
 if ! rustup target list --installed | grep -qx "$bare"; then
   echo "target $bare is not installed: rustup target add $bare" >&2
   exit 1
 fi
-cargo build -p companion-core -p companion-hal -p companion-runtime --target "$bare"
+cargo build -p companion-core -p companion-hal -p companion-runtime -p ch32v003-expander -p cst3530 --target "$bare"
 
 echo "== scripts"
 for f in scripts/*.sh; do bash -n "$f"; done
