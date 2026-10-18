@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use companion_art::ArtLoader;
 use companion_hal::{Capabilities, Resolution, WifiBands};
 use companion_runtime::settings::key;
-use companion_runtime::{App, Settings, TICK};
+use companion_runtime::{card, App, Settings, TICK};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::Size;
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay};
@@ -54,6 +54,7 @@ companion-sim: Volumio ESP Companion on a desktop
   --theme NAME          ink, dusk, studio, night
   --strip MODE          progress, stream, off
   --status-text SIZE    normal, large
+  --card PATH           read settings from a volumio.txt as a device would
   --scale N             window pixels per panel pixel (default 2)
   --snapshot PATH       render to a PNG instead of a window
   --after SECS          seconds to run before the snapshot (default 3)
@@ -88,6 +89,19 @@ fn parse_args() -> Result<Cli, String> {
             "--theme" => &[key::THEME],
             "--strip" => &[key::STRIP_PORTRAIT, key::STRIP_LANDSCAPE],
             "--status-text" => &[key::STATUS_TEXT_PORTRAIT, key::STATUS_TEXT_LANDSCAPE],
+            "--card" => {
+                let text =
+                    std::fs::read_to_string(&value).map_err(|e| format!("--card {value}: {e}"))?;
+                let parsed = card::parse(&text);
+                for (n, k) in &parsed.unknown {
+                    eprintln!("{value}:{n}: unknown key {k:?}");
+                }
+                for n in &parsed.malformed {
+                    eprintln!("{value}:{n}: no '=' on this line");
+                }
+                let Ok(()) = card::apply(&parsed, &mut cli.store);
+                continue;
+            }
             "--scale" => {
                 cli.scale = value
                     .parse()

@@ -60,6 +60,14 @@ pub mod key {
         POLL_MS,
         TOUCH_DEBOUNCE_MS,
     ];
+
+    /// The network to join. Not in [`ALL`]: a device's firmware reads
+    /// these, the application and its settings page never do.
+    pub const WIFI_SSID: &str = "wifi_ssid";
+    /// The network's password; absent or empty is an open network.
+    pub const WIFI_PASSWORD: &str = "wifi_password";
+    /// The credential keys.
+    pub const CREDENTIALS: &[&str] = &[WIFI_SSID, WIFI_PASSWORD];
 }
 
 /// What the application needs to know before it starts.
@@ -285,11 +293,12 @@ mod tests {
 
     #[test]
     fn every_key_fits_an_nvs_name() {
-        for k in key::ALL {
+        for k in key::ALL.iter().chain(key::CREDENTIALS) {
             assert!(k.len() <= key::MAX_KEY_LEN, "{k} is {} bytes", k.len());
             assert!(k.is_ascii(), "{k}");
         }
         assert_eq!(key::ALL.len(), 11);
+        assert_eq!(key::CREDENTIALS.len(), 2);
     }
 
     #[test]

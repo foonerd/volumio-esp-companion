@@ -7,10 +7,10 @@ The firmware for the Waveshare ESP32-C5-Touch-LCD-2.8: ESP32-C5-WROOM-1 (RISC-V,
 Boots on std Rust over ESP-IDF, brings the board up and runs the application on it. On boot it logs, in order:
 
 1. Chip: the target it was built for, the model the ROM reports (23, `esp32c5`), the revision, the cores and the feature flags
-2. Memory: the PSRAM detected, the internal and SPIRAM heap totals
-3. Wi-Fi, through `platform/esp-idf`'s `WifiNet`: the driver started, the band mode set to AUTO (2.4 and 5 GHz) and read back, then a scan listing every access point with its band, channel, strength and auth. Any access point on a channel above 14 proves 5 GHz receive.
-4. A connection, only if `WIFI_SSID` and `WIFI_PASS` were set at build time: channel, band, and the hostname and addresses as the status page reads them through `NetworkStatus`
-5. The settings, read from the NVS namespace `companion` through `NvsStore` (the runtime's keys; defaults when the namespace is empty)
+2. Memory: the PSRAM detected, the internal heap's total, free and largest block, the SPIRAM free
+3. The card, if one is in the slot: its size, then `volumio.txt` read from its root and written into the settings store, with every unknown key and malformed line named. No card, or no FAT volume on it, is one line and the boot goes on. See [Configuring by card](#configuring-by-card).
+4. The settings, read from the NVS namespace `companion` through `NvsStore` (the runtime's keys; defaults when the namespace is empty)
+5. Wi-Fi, through `platform/esp-idf`'s `WifiNet`: the driver started, the band mode set to AUTO (2.4 and 5 GHz) and read back, then a scan listing every access point with its band, channel, strength and auth. Any access point on a channel above 14 proves 5 GHz receive. With `wifi_ssid` in the store, the network is joined and the channel, band, hostname and address logged as the status page reads them through `NetworkStatus`. Then `status.txt` is written to the card with everything so far.
 6. The board (`src/board.rs`), in the vendor BSP's order: the CH32V003 expander up with its outputs high; the panel reset pulsed through it (200 ms low, 200 ms settled); the ST7789 initialised through mipidsi over SPI2 at 40 MHz, RGB565 inverted, rotated as the settings say; the CST3530 reset through the expander (10 ms each side); the touch interrupt on GPIO5
 7. The application: `companion-runtime`'s `App` draws its first frame, then the backlight comes on through the expander's PWM, so nothing shows before the first frame. From here the loop steps the application every 40 ms: the status page with the hostname and address until the player answers `/status` and `getState`, then the face; the touch controller is read while its interrupt is low and the gestures go to the pages; album art is fetched and decoded (JPEG, PNG) on `companion-art`'s thread into PSRAM and drawn when it arrives
 8. A heartbeat every 30 s with the free heap, its low-water mark and whether the player is up
@@ -23,7 +23,9 @@ Audio is not touched.
 | --- | --- |
 | I2C (expander, touch, codec, IMU, RTC) | SDA GPIO0, SCL GPIO1, 400 kHz, one bus shared through `embedded-hal-bus` |
 | CH32V003 expander | I2C `0x24`: EXIO0 touch reset, EXIO1 panel reset, EXIO3 amplifier enable, PWM backlight |
-| ST7789 panel | SPI2: SCK GPIO6, MOSI GPIO7, MISO GPIO8 (the TF card's), CS GPIO10, DC GPIO9; no reset pin of its own |
+| SPI2, shared by the panel and the TF card | SCK GPIO6, MOSI GPIO7, MISO GPIO8; one `SpiDriver` behind an `Rc`, each device with its own chip select and clock |
+| ST7789 panel | SPI2 CS GPIO10, DC GPIO9, 40 MHz; no reset pin of its own |
+| TF card | SPI2 CS GPIO23, SPI mode at 20 MHz (the C5 has no SD/MMC host); FAT through ESP-IDF's FatFs at `/sdcard` |
 | CST3530 touch | I2C `0x58`, INT GPIO5 pulled up, reset on EXIO0 |
 
 ## Stack
@@ -46,11 +48,18 @@ cd firmware/waveshare-esp32-c5-touch-lcd-28
 cargo build --release
 ```
 
-With the connection step and the player's address, compiled into the image. `PLAYER` is written to the settings store on the first boot that finds no `player` key there; use the player's IP address, since `.local` names do not resolve on the device:
+The image carries no network or player of its own; those come from the card, below, and stay in NVS once read.
 
-```sh
-WIFI_SSID=yournet WIFI_PASS=yourpass PLAYER=http://192.168.1.20:3000 cargo build --release
-```
+## Configuring by card
+
+The device reads `volumio.txt` from the root of a microSD card on every boot and writes what it says into its settings store, then writes `status.txt` next to it with the outcome. The card can stay in or come out afterwards; the settings are in NVS either way.
+
+1. A microSD card formatted FAT32. A card of 32 GB or less is FAT32 as sold. A larger card must be formatted FAT32 first (ESP-IDF's FatFs does not read exFAT); Windows' own formatter will not do that above 32 GB, so use a card of 32 GB or less, or a third-party formatter.
+2. Copy [`sdcard/volumio.txt`](../../sdcard/volumio.txt) from this repository to the card's root and edit it in any text editor: at least `wifi_ssid`, `wifi_password` and `player` (the player's IP address, as `http://192.168.1.50:3000`; `.local` names do not resolve on the device). Every other settings key is accepted under its store name; the template lists them.
+3. Eject the card, insert it, power the device.
+4. After a boot, `status.txt` on the card says what the device is, which keys it applied, which lines it did not understand, and whether the network was joined and at which address. It never contains the password. Once it says the network was joined, the `wifi_password` line may be removed from `volumio.txt`; NVS keeps it.
+
+The file is `key = value` per line, UTF-8, CRLF or LF, `#` comments on their own lines only (a `#` after a value is part of the value, since passwords contain them), a value in double quotes keeps its spaces, an empty value puts the setting back to its default. The simulator reads the same file with `--card PATH`, which is how the format is tested on a desktop.
 
 ## Image
 

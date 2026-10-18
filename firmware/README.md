@@ -12,4 +12,4 @@ A firmware crate:
 
 | Crate | Board | Standing |
 | --- | --- | --- |
-| `waveshare-esp32-c5-touch-lcd-28` | Waveshare ESP32-C5-Touch-LCD-2.8 | Boots on std ESP-IDF v5.5.5 and reports the chip, the PSRAM and the Wi-Fi. No panel yet. |
+| `waveshare-esp32-c5-touch-lcd-28` | Waveshare ESP32-C5-Touch-LCD-2.8 | Boots on std ESP-IDF v5.5.5 on its board: the panel and the touch controller through the vendor's bring-up, dual-band Wi-Fi, the network and the player from a microSD card, the application's status page and face. No audio yet. |

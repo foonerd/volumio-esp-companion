@@ -1,0 +1,32 @@
+# volumio.txt - Volumio ESP Companion
+#
+# Copy this file to the root of a FAT32 microSD card (32 GB or smaller
+# works as shipped), edit the values, insert the card, power the device.
+# The device reads it on every boot and writes status.txt next to it.
+#
+# One "key = value" per line. Lines starting with # are ignored. There
+# are no comments after a value: everything after the first = is the
+# value. Wrap a value in "double quotes" to keep leading or trailing
+# spaces. An empty value puts the setting back to its default.
+
+# The Wi-Fi network to join. 2.4 and 5 GHz are both fine. Leave the
+# password empty for an open network.
+wifi_ssid = Your Network
+wifi_password = your password
+
+# The Volumio player, as http://ADDRESS:3000. Use the player's IP
+# address: names ending in .local are not resolved by this device.
+player = http://192.168.1.50:3000
+
+# Screen rotation in degrees clockwise: 0, 90, 180 or 270.
+rotation = 0
+
+# Colour theme: ink, dusk, studio or night.
+theme = ink
+
+# Other settings, same names as the device's settings store:
+#   text_portrait, text_landscape   normal, large
+#   gap_portrait, gap_landscape     tight, default, roomy
+#   strip_portrait, strip_landscape progress, stream, off
+#   poll_ms                         player poll interval, milliseconds
+#   debounce_ms                     minimum gap between two taps

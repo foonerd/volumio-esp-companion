@@ -7,15 +7,19 @@
 //! | --- | --- |
 //! | I2C (expander, touch, codec, IMU, RTC) | SDA GPIO0, SCL GPIO1, 400 kHz |
 //! | CH32V003 expander | I2C `0x24`: EXIO0 touch reset, EXIO1 panel reset, EXIO3 amp enable, PWM backlight |
-//! | ST7789 panel | SPI2: SCK GPIO6, MOSI GPIO7, MISO GPIO8 (the TF card's), CS GPIO10, DC GPIO9; RGB565, inverted |
+//! | SPI2, shared by the panel and the TF card | SCK GPIO6, MOSI GPIO7, MISO GPIO8 |
+//! | ST7789 panel | SPI2 CS GPIO10, DC GPIO9; RGB565, inverted |
+//! | TF card | SPI2 CS GPIO23, SPI mode (the C5 has no SD/MMC host) |
 //! | CST3530 touch | I2C `0x58`, INT GPIO5, reset on EXIO0 |
 //!
 //! The order is the BSP's: the expander up with its outputs high, the
 //! panel reset pulsed 200 ms low and 200 ms settled, the panel
 //! initialised, the touch reset pulsed 10 ms each side, the backlight
-//! last so nothing shows before the first frame.
+//! last so nothing shows before the first frame. The SPI bus is made
+//! before any of it ([`spi_bus`]) so the card can be read first.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use ch32v003_expander::{Expander, Pin as Exio};
 use companion_hal::{Capabilities, Resolution, WifiBands};
@@ -23,8 +27,7 @@ use cst3530::Cst3530;
 use embedded_hal_bus::i2c::RefCellDevice;
 use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::hal::gpio::{
-    Gpio0, Gpio1, Gpio10, Gpio5, Gpio6, Gpio7, Gpio8, Gpio9, Input, Output, PinDriver,
-    Pins as GpioPins, Pull,
+    Gpio0, Gpio1, Gpio10, Gpio5, Gpio6, Gpio7, Gpio8, Gpio9, Input, Output, PinDriver, Pull,
 };
 use esp_idf_svc::hal::i2c::{I2cConfig, I2cDriver, I2cError, I2C0};
 use esp_idf_svc::hal::spi::{
@@ -66,9 +69,13 @@ const AMP_EN: Exio = Exio::P3;
 /// life of the firmware.
 type Bus = &'static RefCell<I2cDriver<'static>>;
 
+/// The SPI bus, shared by the panel and the card for the life of the
+/// firmware.
+pub type Spi = Rc<SpiDriver<'static>>;
+
 /// The panel as a `DrawTarget`.
 pub type Panel = mipidsi::Display<
-    SpiInterface<'static, SpiDeviceDriver<'static, SpiDriver<'static>>, PinDriver<'static, Output>>,
+    SpiInterface<'static, SpiDeviceDriver<'static, Spi>, PinDriver<'static, Output>>,
     ST7789,
     NoResetPin,
 >;
@@ -85,24 +92,16 @@ pub struct Board {
     pub expander: Expander<RefCellDevice<'static, I2cDriver<'static>>>,
 }
 
-/// The peripherals a bring-up consumes, moved out of the peripherals by
-/// name so the compiler knows each is used once. The modem is taken
-/// before this by the network.
+/// The peripherals a bring-up consumes, each moved in by name so the
+/// compiler knows it is used once. The modem goes to the network and the
+/// SPI pins to [`spi_bus`] before this.
 pub struct Pins {
     /// `I2C0`.
     pub i2c0: I2C0<'static>,
-    /// `SPI2`.
-    pub spi2: SPI2<'static>,
     /// SDA.
     pub sda: Gpio0<'static>,
     /// SCL.
     pub scl: Gpio1<'static>,
-    /// Panel SCK.
-    pub sck: Gpio6<'static>,
-    /// Panel MOSI.
-    pub mosi: Gpio7<'static>,
-    /// Bus MISO (the TF card's; the panel does not read).
-    pub miso: Gpio8<'static>,
     /// Panel DC.
     pub dc: Gpio9<'static>,
     /// Panel CS.
@@ -111,27 +110,24 @@ pub struct Pins {
     pub touch_int: Gpio5<'static>,
 }
 
-impl Pins {
-    /// The board's pins, out of the peripherals' parts after the modem
-    /// has been moved out for the network.
-    pub fn new(i2c0: I2C0<'static>, spi2: SPI2<'static>, pins: GpioPins) -> Self {
-        Self {
-            i2c0,
-            spi2,
-            sda: pins.gpio0,
-            scl: pins.gpio1,
-            sck: pins.gpio6,
-            mosi: pins.gpio7,
-            miso: pins.gpio8,
-            dc: pins.gpio9,
-            cs: pins.gpio10,
-            touch_int: pins.gpio5,
-        }
-    }
+/// The SPI bus with DMA, before anything is on it.
+pub fn spi_bus(
+    spi2: SPI2<'static>,
+    sck: Gpio6<'static>,
+    mosi: Gpio7<'static>,
+    miso: Gpio8<'static>,
+) -> Result<Spi, EspError> {
+    Ok(Rc::new(SpiDriver::new(
+        spi2,
+        sck,
+        mosi,
+        Some(miso),
+        &DriverConfig::new().dma(Dma::Auto(4096)),
+    )?))
 }
 
 /// Bring the board up in the BSP's order and return its parts.
-pub fn bring_up(pins: Pins, rotation: u16) -> Result<Board, BringUpError> {
+pub fn bring_up(pins: Pins, spi: Spi, rotation: u16) -> Result<Board, BringUpError> {
     // The bus, leaked: it lives as long as the firmware, and both the
     // expander and the touch controller borrow it.
     let bus: Bus = Box::leak(Box::new(RefCell::new(I2cDriver::new(
@@ -151,13 +147,6 @@ pub fn bring_up(pins: Pins, rotation: u16) -> Result<Board, BringUpError> {
     expander.set(PANEL_RST, true)?;
     FreeRtos::delay_ms(200);
 
-    let spi = SpiDriver::new(
-        pins.spi2,
-        pins.sck,
-        pins.mosi,
-        Some(pins.miso),
-        &DriverConfig::new().dma(Dma::Auto(4096)),
-    )?;
     let device = SpiDeviceDriver::new(
         spi,
         Some(pins.cs),

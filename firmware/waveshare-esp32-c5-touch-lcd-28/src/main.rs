@@ -5,11 +5,14 @@
 //! 1. The image boots and Rust std runs (log output, threads, heap).
 //! 2. Chip identity and revision as the ROM/IDF report them.
 //! 3. PSRAM detected and sized (board has 8 MB).
-//! 4. Wi-Fi driver starts through the platform crate, dual-band mode
-//!    accepted, scan returns APs. Any AP on channel > 14 proves 5 GHz.
-//! 5. Optional: if WIFI_SSID / WIFI_PASS were set at build time, connect
-//!    and report the DHCP address and what the status page would show.
-//! 6. The settings read from NVS through the platform's store.
+//! 4. The card, if one is in the slot: `volumio.txt` read and written
+//!    into the settings store, so the card is how a user configures the
+//!    device (`sdcard/volumio.txt` is the template).
+//! 5. The settings read from NVS through the platform's store.
+//! 6. Wi-Fi driver starts through the platform crate, dual-band mode
+//!    accepted, scan returns APs; with `wifi_ssid` set, the network is
+//!    joined and the address reported. `status.txt` is written to the
+//!    card with the outcome.
 //! 7. The board: the expander, the panel through it, the touch controller,
 //!    the backlight ([`board`]).
 //! 8. The application: `companion-runtime`'s `App` stepped on this loop
@@ -24,22 +27,17 @@ use std::time::{Duration, Instant};
 
 use companion_art::ArtLoader;
 use companion_hal::{ConfigStore, NetworkStatus, TouchSource};
-use companion_platform_esp_idf::{Http, NvsError, NvsStore, WifiNet};
+use companion_platform_esp_idf::{Card, Http, NvsStore, WifiNet};
 use companion_runtime::settings::key;
-use companion_runtime::{App, Settings, TICK};
+use companion_runtime::{card, App, Settings, TICK};
 use esp_idf_svc::eventloop::EspSystemEventLoop;
+use esp_idf_svc::hal::gpio::{Gpio23, Pins as GpioPins};
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys;
 use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
 use log::{info, warn};
-
-const SSID: Option<&str> = option_env!("WIFI_SSID");
-const PASS: Option<&str> = option_env!("WIFI_PASS");
-/// The player's origin, seeded into the settings store on first boot when
-/// the store has none; `.local` names do not resolve on the device.
-const PLAYER: Option<&str> = option_env!("PLAYER");
 
 /// The NVS namespace the settings live in.
 const SETTINGS_NAMESPACE: &str = "companion";
@@ -55,7 +53,8 @@ fn main() -> anyhow::Result<()> {
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION")
     );
-    report_chip();
+    let mut status = Status::new();
+    report_chip(&mut status);
     report_memory();
 
     let Peripherals {
@@ -65,57 +64,97 @@ fn main() -> anyhow::Result<()> {
         pins,
         ..
     } = Peripherals::take()?;
+    let GpioPins {
+        gpio0,
+        gpio1,
+        gpio5,
+        gpio6,
+        gpio7,
+        gpio8,
+        gpio9,
+        gpio10,
+        gpio23,
+        ..
+    } = pins;
     let sys_loop = EspSystemEventLoop::take()?;
     let nvs = EspDefaultNvsPartition::take()?;
+    let mut store = NvsStore::open(nvs.clone(), SETTINGS_NAMESPACE)?;
 
-    let mut net = match WifiNet::start(modem, sys_loop, nvs.clone()) {
-        Ok(mut net) => {
-            info!("wifi: started");
-            set_dual_band();
-            scan(net.wifi_mut());
-            if let (Some(ssid), Some(pass)) = (SSID, PASS) {
-                match net.connect(ssid, pass) {
-                    Ok(()) => report_link(&mut net, ssid),
-                    Err(e) => warn!("wifi: connect to '{ssid}' failed: {e:?}"),
-                }
-            } else {
-                info!("wifi: no WIFI_SSID/WIFI_PASS at build time, connect step skipped");
-            }
-            Net::Wifi(net)
-        }
-        Err(e) => {
-            // The panel is still worth lighting; the status page says offline.
-            warn!("wifi: start failed: {e:?}; running without a network");
-            report_memory();
-            Net::Offline
-        }
-    };
+    let spi = board::spi_bus(spi2, gpio6, gpio7, gpio8)?;
+    let card = read_card(spi.clone(), gpio23, &mut store, &mut status);
 
-    let mut store = NvsStore::open(nvs, SETTINGS_NAMESPACE)?;
-    if let Some(player) = PLAYER {
-        let seed = |s: &mut NvsStore| -> Result<bool, NvsError> {
-            if s.get(key::PLAYER)?.is_none() {
-                s.set(key::PLAYER, player)?;
-                return Ok(true);
-            }
-            Ok(false)
-        };
-        match seed(&mut store) {
-            Ok(true) => info!("settings: player seeded from the build: {player}"),
-            Ok(false) => {}
-            Err(e) => warn!("settings: could not seed player: {e:?}"),
-        }
-    }
     let settings = Settings::load(&store);
-    info!(
+    let line = format!(
         "settings: player {}, rotation {}, theme {}, strip {}",
         settings.player,
         settings.rotation,
         settings.theme.as_str(),
         settings.strip().as_str()
     );
+    info!("{line}");
+    status.line(line);
+    let ssid = store.get(key::WIFI_SSID).ok().flatten();
+    let password = store
+        .get(key::WIFI_PASSWORD)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
 
-    let mut board = board::bring_up(board::Pins::new(i2c0, spi2, pins), settings.rotation)?;
+    let mut net = match WifiNet::start(modem, sys_loop, nvs) {
+        Ok(mut net) => {
+            info!("wifi: started");
+            set_dual_band();
+            scan(net.wifi_mut());
+            match ssid.as_deref() {
+                Some(ssid) => match net.connect(ssid, &password) {
+                    Ok(()) => status.line(report_link(&mut net, ssid)),
+                    Err(e) => {
+                        let line = format!("wifi: could not join '{ssid}': {e}");
+                        warn!("{line}");
+                        status.line(line);
+                    }
+                },
+                None => {
+                    let line = format!(
+                        "wifi: no {} set; put it in {} on a card",
+                        key::WIFI_SSID,
+                        card::FILE_NAME
+                    );
+                    info!("{line}");
+                    status.line(line);
+                }
+            }
+            Net::Wifi(net)
+        }
+        Err(e) => {
+            // The panel is still worth lighting; the status page says offline.
+            let line = format!("wifi: start failed: {e}; running without a network");
+            warn!("{line}");
+            status.line(line);
+            report_memory();
+            Net::Offline
+        }
+    };
+
+    if let Some(card) = &card {
+        match card.write(card::STATUS_NAME, &status.text()) {
+            Ok(()) => info!("card: {} written", card::STATUS_NAME),
+            Err(e) => warn!("card: could not write {}: {e}", card::STATUS_NAME),
+        }
+    }
+
+    let mut board = board::bring_up(
+        board::Pins {
+            i2c0,
+            sda: gpio0,
+            scl: gpio1,
+            dc: gpio9,
+            cs: gpio10,
+            touch_int: gpio5,
+        },
+        spi,
+        settings.rotation,
+    )?;
     let start = Instant::now();
     let mut app = App::new(&settings, board::CAPABILITIES, Duration::ZERO);
     let mut http = Http::new();
@@ -162,21 +201,100 @@ fn main() -> anyhow::Result<()> {
 }
 
 /// What the status page would show, through the same trait it reads.
-fn report_link(net: &mut WifiNet, ssid: &str) {
+fn report_link(net: &mut WifiNet, ssid: &str) -> String {
     let host = net.host_info();
     let mut ch: u8 = 0;
     let mut second: sys::wifi_second_chan_t = 0;
     // SAFETY: writes into caller-owned values.
     unsafe { sys::esp_wifi_get_channel(&mut ch, &mut second) };
     let band = if ch > 14 { "5 GHz" } else { "2.4 GHz" };
-    info!(
-        "wifi: connected to '{ssid}' on ch {ch} ({band}); host {:?}, addresses {:?}",
+    let line = format!(
+        "wifi: joined '{ssid}' on ch {ch} ({band}); hostname {}, address {}",
         host.hostname,
         host.addrs
             .iter()
             .map(|a| a.addr.as_str())
             .collect::<Vec<_>>()
+            .join(", ")
     );
+    info!("{line}");
+    line
+}
+
+/// Mount the card, apply `volumio.txt` to the store, say what happened.
+/// `None` when there is no card or no FAT volume on it.
+fn read_card(
+    spi: board::Spi,
+    cs: Gpio23<'static>,
+    store: &mut NvsStore,
+    status: &mut Status,
+) -> Option<Card> {
+    let card = match Card::mount(spi, cs) {
+        Ok(card) => card,
+        Err(e) => {
+            info!("card: none mounted ({e}); settings stay as stored");
+            return None;
+        }
+    };
+    info!("card: mounted, {} MB", card.capacity >> 20);
+    status.line(format!("card: {} MB", card.capacity >> 20));
+    match card.read(card::FILE_NAME) {
+        Ok(Some(text)) => {
+            let parsed = card::parse(&text);
+            let keys: Vec<&str> = parsed.entries.iter().map(|e| e.key.as_str()).collect();
+            let line = match card::apply(&parsed, store) {
+                Ok(()) => format!("{}: applied {}", card::FILE_NAME, keys.join(", ")),
+                Err(e) => format!("{}: store refused: {e}", card::FILE_NAME),
+            };
+            info!("card: {line}");
+            status.line(line);
+            for (n, k) in &parsed.unknown {
+                let line = format!("{}: line {n}: unknown key {k:?}", card::FILE_NAME);
+                warn!("card: {line}");
+                status.line(line);
+            }
+            for n in &parsed.malformed {
+                let line = format!("{}: line {n}: no '=' on this line", card::FILE_NAME);
+                warn!("card: {line}");
+                status.line(line);
+            }
+        }
+        Ok(None) => {
+            let line = format!("{}: not on the card", card::FILE_NAME);
+            info!("card: {line}");
+            status.line(line);
+        }
+        Err(e) => {
+            let line = format!("{}: could not be read: {e}", card::FILE_NAME);
+            warn!("card: {line}");
+            status.line(line);
+        }
+    }
+    Some(card)
+}
+
+/// The lines `status.txt` gets: what the device is, what it read, what
+/// the network said. Never a password.
+struct Status(Vec<String>);
+
+impl Status {
+    fn new() -> Self {
+        Self(vec![format!(
+            "Volumio ESP Companion {} {}",
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION")
+        )])
+    }
+
+    fn line(&mut self, s: String) {
+        self.0.push(s);
+    }
+
+    fn text(&self) -> String {
+        let mut t = self.0.join("\r\n");
+        t.push_str("\r\n");
+        t
+    }
 }
 
 // esp_chip_info.h is not in esp-idf-sys 0.38.1's generated bindings.
@@ -198,7 +316,7 @@ extern "C" {
     fn esp_chip_info(out_info: *mut EspChipInfo);
 }
 
-fn report_chip() {
+fn report_chip(status: &mut Status) {
     let mut chip = EspChipInfo::default();
     // SAFETY: fills the caller-owned struct; layout matches the C header.
     unsafe { esp_chip_info(&mut chip) };
@@ -214,6 +332,12 @@ fn report_chip() {
         chip.cores,
         chip.features
     );
+    status.line(format!(
+        "board: {}, chip {target} v{}.{}",
+        board::CAPABILITIES.board,
+        chip.revision / 100,
+        chip.revision % 100
+    ));
 }
 
 fn report_memory() {

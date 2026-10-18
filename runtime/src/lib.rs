@@ -37,6 +37,7 @@ extern crate alloc;
 
 pub mod app;
 pub mod art;
+pub mod card;
 pub mod gesture;
 pub mod settings;
 pub mod url;

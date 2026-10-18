@@ -2,7 +2,8 @@
 //!
 //! The device half of the HAL for ESP-IDF: [`Http`] for the player's REST
 //! and album art, [`NvsStore`] for the settings, [`WifiNet`] for joining a
-//! network and for the status page. A firmware crate builds these once
+//! network and for the status page, [`Card`] for the configuration file a
+//! removable card carries. A firmware crate builds these once
 //! and hands them to `companion-runtime`'s `App`; the panel, the touch
 //! controller and the expander are the board's own and come from
 //! `drivers/`.
@@ -12,10 +13,12 @@
 
 #![deny(unsafe_code)]
 
+pub mod card;
 pub mod http;
 pub mod net;
 pub mod nvs;
 
+pub use card::Card;
 pub use http::Http;
 pub use net::WifiNet;
 pub use nvs::{NvsError, NvsStore};
