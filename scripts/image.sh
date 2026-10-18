@@ -52,11 +52,45 @@ out="$root/dist"
 stem="volumio-esp-companion-$name-$version"
 mkdir -p "$out"
 cp "$build/$boot_file" "$out/$stem-bootloader.bin"
-cp "$build/$pt_file" "$out/$stem-partition-table.bin"
+
+# esp-idf-sys does not feed a crate's partitions.csv to the ESP-IDF build, so
+# the table in flasher_args.json is ESP-IDF's default. A crate that ships its
+# own partitions.csv gets it generated here with ESP-IDF's own tool.
+if [ -f "$crate/partitions.csv" ]; then
+  gen=$(find "$crate/.embuild" -name gen_esp32part.py | head -1)
+  [ -n "$gen" ] || { echo "gen_esp32part.py not found under $1/.embuild" >&2; exit 1; }
+  python3 "$gen" -q "$crate/partitions.csv" "$out/$stem-partition-table.bin"
+else
+  cp "$build/$pt_file" "$out/$stem-partition-table.bin"
+fi
 
 python3 -m esptool --chip "$chip" elf2image \
     --flash-mode "$mode" --flash-freq "$freq" --flash-size "$size" \
     -o "$out/$stem-app.bin" "$elf"
+
+# The bootloader refuses an app longer than its partition; say so here, not
+# on the bench.
+read -r app_size app_cap < <(python3 -I - "$out/$stem-app.bin" "$out/$stem-partition-table.bin" "$app_off" <<'PY'
+import struct, sys, os
+app = os.path.getsize(sys.argv[1])
+table = open(sys.argv[2], "rb").read()
+app_off = int(sys.argv[3], 0)
+cap = 0
+for i in range(0, len(table), 32):
+    e = table[i:i+32]
+    if e[:2] != b"\xaa\x50":
+        break
+    typ, sub, off, size = e[2], e[3], struct.unpack("<I", e[4:8])[0], struct.unpack("<I", e[8:12])[0]
+    if typ == 0 and off == app_off:
+        cap = size
+print(app, cap)
+PY
+)
+if [ "$app_size" -gt "$app_cap" ]; then
+  echo "app is $app_size bytes, the partition at $app_off holds $app_cap: it will not boot" >&2
+  exit 1
+fi
+echo "app $app_size bytes in a $app_cap byte partition"
 
 python3 -m esptool --chip "$chip" merge-bin -o "$out/$stem.bin" \
     --flash-mode "$mode" --flash-freq "$freq" --flash-size "$size" \
