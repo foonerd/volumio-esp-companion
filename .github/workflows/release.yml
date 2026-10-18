@@ -70,9 +70,13 @@ jobs:
       - name: Image
         run: scripts/image.sh "$FIRMWARE"
       - name: Gather
+        # What a user needs and nothing else: the one image, its checksum,
+        # the card template. The parts stay in the CI artefact.
         run: |
+          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' "$FIRMWARE/Cargo.toml" | head -1)
           mkdir -p release
-          cp dist/*.bin dist/*.SHA256SUMS sdcard/volumio.txt release/
+          cp "dist/volumio-esp-companion-waveshare-esp32-c5-touch-lcd-28-$ver.bin" sdcard/volumio.txt release/
+          ( cd release && sha256sum ./*.bin > SHA256SUMS )
           ls -l release
       - uses: actions/upload-artifact@v7
         with:
@@ -100,7 +104,9 @@ jobs:
           body: |
             Volumio ESP Companion ${{ github.ref_name }} for the Waveshare ESP32-C5-Touch-LCD-2.8.
 
-            **Files.** `volumio-esp-companion-waveshare-esp32-c5-touch-lcd-28-*.bin` is the whole image; flash it at address 0. The `-bootloader`, `-partition-table` and `-app` files are its three parts for anyone flashing them separately. `SHA256SUMS` covers all four. `volumio.txt` is the card template.
+            **New here? Follow [Install](https://github.com/${{ github.repository }}/wiki/Install)**: what to download, how to flash it from Windows, macOS or Linux, and the one text file that connects the panel to your player. Ten minutes, no toolchain.
+
+            **Files.** You need two: `volumio-esp-companion-waveshare-esp32-c5-touch-lcd-28-${{ env.VERSION }}.bin`, the firmware, and `volumio.txt`, the card template. `SHA256SUMS` is for checking the download; the "Source code" archives are the code, not something to flash.
 
             ## Install
 

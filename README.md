@@ -12,71 +12,7 @@ The panel is a client of the player over the LAN, as the Volumio apps are: it po
 
 ## Install
 
-Each [release](https://github.com/foonerd/volumio-esp-companion/releases) carries the flashable image, its checksums, the card template and the install steps for Windows, macOS and Linux: `esptool`, one `write-flash` command, one text file on a microSD card. No toolchain needed. To build it yourself, see [Build](#build).
-
-## Boards
-
-| Board | SoC | PSRAM | Flash | Display | Touch | Standing |
-| --- | --- | --- | --- | --- | --- | --- |
-| Waveshare ESP32-C5-Touch-LCD-2.8 | ESP32-C5, RISC-V, 2.4 and 5 GHz | 8 MB | 32 MB | ST7789, SPI, 240x320 | CST3530 | Running: bring-up, panel, touch, the application, album art, configuration by card. No audio yet. |
-| Waveshare ESP32-C6-Touch-LCD-2.8 | ESP32-C6, RISC-V, 2.4 GHz | none | 16 MB | ST7789, SPI, 240x320 | CST3530 | Planned. |
-| Waveshare ESP32-S3-Touch-LCD-2.8 | ESP32-S3, Xtensa | 8 MB | 16 MB | ST7789, SPI, 240x320 | CST3530 | Planned. |
-
-The three Waveshare siblings come first; any vendor's ESP32 display board is in scope after them, SPI panels before QSPI, RGB and MIPI. The [Boards](https://github.com/foonerd/volumio-esp-companion/wiki/Boards) page carries the detail.
-
-## What is in the box
-
-```mermaid
-flowchart LR
-    subgraph LAN
-        V[Volumio player<br/>REST on :3000, mDNS _Volumio._tcp] <-- Wi-Fi --> B
-        subgraph B[ESP32 display board]
-            direction TB
-            FW[firmware/&lt;vendor&gt;-&lt;model&gt;<br/>pins, bring-up, capabilities] --> RT[runtime<br/>loop, Volumio client, art]
-            RT --> C[core<br/>pages, surface, state]
-            FW --> D[drivers<br/>touch, expander, codec]
-            FW --> P[platform/esp-idf<br/>Wi-Fi, NVS, mDNS, HTTP]
-            C -- DrawTarget --> LCD[(panel)]
-            D -- hal::Touch --> RT
-        end
-    end
-```
-
-| Layer | Where | Holds | Builds on |
-| --- | --- | --- | --- |
-| core | `core/` | The pages, the drawing surface, the player state model and the Volumio protocol types. `no_std`, no `unsafe`, no platform crate. | host and device |
-| hal | `hal/` | The traits the core and the runtime talk to (touch source, network transport, configuration store) and the capabilities record a firmware fills in: resolution, PSRAM, microphone, speaker, IMU, Wi-Fi bands. The display is embedded-graphics' `DrawTarget`. | host and device |
-| drivers | `drivers/<chip>/` | One crate per controller chip, over embedded-hal, vendor-neutral. SPI panels through mipidsi. | host and device |
-| runtime | `runtime/` | The application: the loop as a state machine the device steps, the gesture derivation, the Volumio client, the album-art gate, the settings. `no_std`, generic over `hal`; the device owns threads, clock and I/O and calls in. | host and device |
-| art | `art/` | Album art fetched and decoded (JPEG, PNG) on a thread, for any device with std and the memory: the simulator and an ESP32 on ESP-IDF share it. | host and device |
-| platform | `platform/esp-idf/` | What every ESP board shares, over esp-idf-svc: the HTTP client with mbedTLS and the certificate bundle, the settings store in NVS, the Wi-Fi as the network status. Built inside a firmware crate's workspace; no `unsafe`. | device |
-| firmware | `firmware/<vendor>-<model>/` | The device. One crate per board, a workspace of its own with its target, toolchain, sdkconfig and partition table; the pin map, the bring-up, the expanders, the capabilities record; a thin `main.rs` that builds the board and hands it to the runtime. Its build is the image you flash. | that device |
-| sim | `sim/` | The application on a desktop window or in a PNG, talking to a real player, for page work without a board. The host's HTTP, interfaces and a thread for art stand in for the device. | host |
-
-Today: `hal/` holds the traits and the capabilities record; `core/` holds the pages, the surfaces and the player state model; `runtime/` holds the application, carried over from rpi-waveshare28 with its rules intact and reshaped so a device steps it; `drivers/` holds the CH32V003 IO expander, the CST3530 touch controller and the ES8311 codec; all of it with its tests, building for bare-metal RISC-V; `sim/` runs the application on a desktop against a real player; `platform/esp-idf/` gives an ESP board its HTTP, its settings store and its network status; `firmware/waveshare-esp32-c5-touch-lcd-28/` brings its board up through the expander, lights the panel and runs the application on it, touch, album art and all. None of it has met the board yet; that is the bench's turn. Next after the bench: audio.
-
-```mermaid
-flowchart TB
-    core[core · no_std · pages, surface, state, protocol types]
-    hal[hal · no_std · traits + capabilities]
-    drivers[drivers/&lt;chip&gt; · no_std · embedded-hal]
-    runtime[runtime · no_std · the application]
-    platform[platform/esp-idf · std + esp-idf-svc]
-    firmware[firmware/&lt;vendor&gt;-&lt;model&gt; · the device, the image]
-    sim[sim · the application on a desktop]
-
-    core --> hal
-    runtime --> core
-    runtime --> hal
-    drivers --> hal
-    platform --> hal
-    firmware --> runtime
-    firmware --> drivers
-    firmware --> platform
-    sim --> runtime
-```
-
-Arrows read "depends on". Nothing above `runtime` knows ESP-IDF; nothing in `core`, `hal` or `runtime` knows std. The layers are the point. A new board is one crate under `firmware/`: its pins, its bring-up order and a filled-in capabilities record, and every page, the touch handling and the Volumio client come with it. A new controller chip is one crate under `drivers/`, written once against embedded-hal, and every board that carries the chip uses it. Nothing in `core/` knows a vendor's name.
+No toolchain. [Install](https://github.com/foonerd/volumio-esp-companion/wiki/Install) on the wiki takes you from the [latest release](https://github.com/foonerd/volumio-esp-companion/releases/latest) to the player's face: two files to download, one `esptool` command from Windows, macOS or Linux, one text file on a microSD card. To build it yourself, see [Build](#build).
 
 ## Build
 
