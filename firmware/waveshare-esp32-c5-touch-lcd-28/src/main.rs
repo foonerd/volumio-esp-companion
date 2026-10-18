@@ -33,6 +33,7 @@ use companion_runtime::{card, App, Settings, TICK};
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::gpio::{Gpio23, Pins as GpioPins};
 use esp_idf_svc::hal::peripherals::Peripherals;
+use esp_idf_svc::hal::task::thread::{MallocCap, ThreadSpawnConfiguration};
 use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys;
@@ -43,6 +44,12 @@ use log::{info, warn};
 const SETTINGS_NAMESPACE: &str = "companion";
 /// How often the loop logs the heap.
 const HEARTBEAT: Duration = Duration::from_secs(30);
+/// The art thread's stack, in PSRAM. The 48 KB measured on a desktop
+/// overflowed on the device inside the JPEG decoder's table setup (bench
+/// run 5); external RAM makes the size a non-question.
+const ART_THREAD_STACK: usize = 256 * 1024;
+/// The art thread's task name, for the heartbeat's low-water lookup.
+const ART_THREAD_NAME: &core::ffi::CStr = c"art";
 
 fn main() -> anyhow::Result<()> {
     sys::link_patches();
@@ -104,7 +111,11 @@ fn main() -> anyhow::Result<()> {
         Ok(mut net) => {
             info!("wifi: started");
             set_dual_band();
-            scan(net.wifi_mut());
+            // The scan is a bring-up diagnostic; with a network to join it
+            // only costs the boot twelve seconds.
+            if ssid.is_none() {
+                scan(net.wifi_mut());
+            }
             match ssid.as_deref() {
                 Some(ssid) => match net.connect(ssid, &password) {
                     Ok(()) => status.line(report_link(&mut net, ssid)),
@@ -158,7 +169,7 @@ fn main() -> anyhow::Result<()> {
     let start = Instant::now();
     let mut app = App::new(&settings, board::CAPABILITIES, Duration::ZERO);
     let mut http = Http::new();
-    let loader = ArtLoader::spawn_with_stack(Http::new(), companion_art::DEVICE_THREAD_STACK)?;
+    let loader = spawn_art()?;
 
     // The first frame before the light, so the panel never shows garbage.
     app.step(start.elapsed(), &mut http, &mut net, &mut board.panel)
@@ -192,12 +203,41 @@ fn main() -> anyhow::Result<()> {
             let free = unsafe { sys::esp_get_free_heap_size() };
             let min = unsafe { sys::esp_get_minimum_free_heap_size() };
             info!(
-                "heartbeat: free heap {free} B, low-water {min} B, player {}",
+                "heartbeat: free heap {free} B, low-water {min} B, art stack low-water {}, player {}",
+                art_stack_low_water()
+                    .map(|b| format!("{b} B"))
+                    .unwrap_or_else(|| "?".into()),
                 if app.on_player() { "up" } else { "waiting" }
             );
         }
         std::thread::sleep(TICK);
     }
+}
+
+/// The art thread with its stack in PSRAM. The pthread config is per
+/// calling thread and names the allocation caps; the stack size itself
+/// comes from the builder.
+fn spawn_art() -> anyhow::Result<ArtLoader> {
+    ThreadSpawnConfiguration {
+        name: Some(ART_THREAD_NAME),
+        stack_alloc_caps: MallocCap::Spiram | MallocCap::Cap8bit,
+        ..Default::default()
+    }
+    .set()?;
+    let loader = ArtLoader::spawn_with_stack(Http::new(), ART_THREAD_STACK);
+    ThreadSpawnConfiguration::default().set()?;
+    Ok(loader?)
+}
+
+/// The least stack the art thread has had left, in bytes.
+fn art_stack_low_water() -> Option<u32> {
+    // SAFETY: a lookup by name and a getter on the handle it returns.
+    let task = unsafe { sys::xTaskGetHandle(ART_THREAD_NAME.as_ptr()) };
+    if task.is_null() {
+        return None;
+    }
+    // SAFETY: the handle is a live task's; ESP-IDF's StackType_t is a byte.
+    Some(unsafe { sys::uxTaskGetStackHighWaterMark(task) })
 }
 
 /// What the status page would show, through the same trait it reads.
