@@ -31,7 +31,7 @@ Audio is not touched.
 | Item | Version |
 | --- | --- |
 | esp-idf-sys / esp-idf-hal / esp-idf-svc | 0.38.1 / 0.47.0 / 0.53.0 |
-| ESP-IDF | v5.5.6, fetched by embuild into `.embuild/` on the first build |
+| ESP-IDF | v5.5.5, fetched by embuild into `.embuild/` on the first build. Not v5.5.6: that release added `wifi_task_stack_size` to `wifi_init_config_t`, which esp-idf-svc 0.53.0 does not set, so the Wi-Fi task is created with no stack and `esp_wifi_init` fails with `ESP_ERR_NO_MEM` (found on the first bench run). Move up when esp-idf-svc sets the field. |
 | Rust | nightly-2026-10-17 with `rust-src` (`build-std`), pinned by `rust-toolchain.toml` |
 | Target | `riscv32imac-esp-espidf`, `MCU=esp32c5` |
 | Linker | ldproxy 0.3.5 |
