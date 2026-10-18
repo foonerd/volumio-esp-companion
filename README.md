@@ -14,7 +14,7 @@ The panel is a client of the player over the LAN, as the Volumio apps are: it fi
 
 | Board | SoC | PSRAM | Flash | Display | Touch | Standing |
 | --- | --- | --- | --- | --- | --- | --- |
-| Waveshare ESP32-C5-Touch-LCD-2.8 | ESP32-C5, RISC-V, 2.4 and 5 GHz | 8 MB | 32 MB | ST7789, SPI, 240x320 | CST3530 | Firmware boots and reports; the board is on the bench. |
+| Waveshare ESP32-C5-Touch-LCD-2.8 | ESP32-C5, RISC-V, 2.4 and 5 GHz | 8 MB | 32 MB | ST7789, SPI, 240x320 | CST3530 | Firmware written: bring-up, panel, touch, the application, album art. Awaiting its first run on the board. |
 | Waveshare ESP32-C6-Touch-LCD-2.8 | ESP32-C6, RISC-V, 2.4 GHz | none | 16 MB | ST7789, SPI, 240x320 | CST3530 | Planned. |
 | Waveshare ESP32-S3-Touch-LCD-2.8 | ESP32-S3, Xtensa | 8 MB | 16 MB | ST7789, SPI, 240x320 | CST3530 | Planned. |
 
@@ -49,7 +49,7 @@ flowchart LR
 | firmware | `firmware/<vendor>-<model>/` | The device. One crate per board, a workspace of its own with its target, toolchain, sdkconfig and partition table; the pin map, the bring-up, the expanders, the capabilities record; a thin `main.rs` that builds the board and hands it to the runtime. Its build is the image you flash. | that device |
 | sim | `sim/` | The application on a desktop window or in a PNG, talking to a real player, for page work without a board. The host's HTTP, interfaces and a thread for art stand in for the device. | host |
 
-Today: `hal/` holds the traits and the capabilities record; `core/` holds the pages, the surfaces and the player state model; `runtime/` holds the application, carried over from rpi-waveshare28 with its rules intact and reshaped so a device steps it; `drivers/` holds the CH32V003 IO expander and the CST3530 touch controller; all of it with its tests, building for bare-metal RISC-V; `sim/` runs the application on a desktop against a real player; `platform/esp-idf/` gives an ESP board its HTTP, its settings store and its network status; `firmware/waveshare-esp32-c5-touch-lcd-28/` brings its board up through the expander, lights the panel and runs the application on it, touch, album art and all. None of it has met the board yet; that is the bench's turn. Next after the bench: audio.
+Today: `hal/` holds the traits and the capabilities record; `core/` holds the pages, the surfaces and the player state model; `runtime/` holds the application, carried over from rpi-waveshare28 with its rules intact and reshaped so a device steps it; `drivers/` holds the CH32V003 IO expander, the CST3530 touch controller and the ES8311 codec; all of it with its tests, building for bare-metal RISC-V; `sim/` runs the application on a desktop against a real player; `platform/esp-idf/` gives an ESP board its HTTP, its settings store and its network status; `firmware/waveshare-esp32-c5-touch-lcd-28/` brings its board up through the expander, lights the panel and runs the application on it, touch, album art and all. None of it has met the board yet; that is the bench's turn. Next after the bench: audio.
 
 ```mermaid
 flowchart TB
@@ -105,4 +105,4 @@ Each firmware crate's README has its flash command.
 
 ## License
 
-MIT. The pages, the surface and the state model descend from [rpi-waveshare28](https://github.com/foonerd/rpi-waveshare28) by the same author. The register maps and bring-up sequences of the CH32V003 expander and the CST3530 touch controller are transcribed from Waveshare's board repository, [ESP32-C5-Touch-LCD-2.8](https://github.com/waveshareteam/ESP32-C5-Touch-LCD-2.8), Apache-2.0, copyright Waveshare and Espressif Systems; each driver's source names the file it was read from.
+MIT. The pages, the surface and the state model descend from [rpi-waveshare28](https://github.com/foonerd/rpi-waveshare28) by the same author. The register maps and bring-up sequences of the CH32V003 expander and the CST3530 touch controller are transcribed from Waveshare's board repository, [ESP32-C5-Touch-LCD-2.8](https://github.com/waveshareteam/ESP32-C5-Touch-LCD-2.8), Apache-2.0, copyright Waveshare and Espressif Systems; the ES8311 codec's from Espressif's `esp_codec_dev` in [esp-adf](https://github.com/espressif/esp-adf), Apache-2.0, copyright Espressif Systems; each driver's source names the file it was read from.
