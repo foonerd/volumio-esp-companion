@@ -104,4 +104,4 @@ Each firmware crate's README has its flash command.
 
 ## License
 
-MIT. The pages, the surface and the state model descend from [rpi-waveshare28](https://github.com/foonerd/rpi-waveshare28) by the same author.
+MIT. The pages, the surface and the state model descend from [rpi-waveshare28](https://github.com/foonerd/rpi-waveshare28) by the same author. The register maps and bring-up sequences of the CH32V003 expander and the CST3530 touch controller are transcribed from Waveshare's board repository, [ESP32-C5-Touch-LCD-2.8](https://github.com/waveshareteam/ESP32-C5-Touch-LCD-2.8), Apache-2.0, copyright Waveshare and Espressif Systems; each driver's source names the file it was read from.

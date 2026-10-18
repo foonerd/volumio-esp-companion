@@ -7,9 +7,11 @@
 //! the audio amplifier enable (EXIO3), plus the backlight as a PWM output
 //! and one ADC input. Nothing lights before this device is spoken to.
 //!
-//! The register map is Waveshare's, read from the board repository's
-//! `examples/arduino/01_exio/io_extension.cpp` and the BSP's use of their
-//! `custom_io_expander_ch32v003` component:
+//! The register map is Waveshare's, read from the board repository
+//! ([waveshareteam/ESP32-C5-Touch-LCD-2.8](https://github.com/waveshareteam/ESP32-C5-Touch-LCD-2.8)
+//! at `77a7dce`, Apache-2.0, copyright Waveshare): `examples/arduino/01_exio/io_extension.cpp`
+//! for the registers, the BSP `esp32_c5_touch_lcd_2.8.c` for the directions,
+//! the default levels and the reset pulses. Transcribed, not copied.
 //!
 //! | Register | Function |
 //! | --- | --- |

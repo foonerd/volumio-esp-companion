@@ -7,7 +7,11 @@
 //! is a [`TouchSample`] as it stands.
 //!
 //! The protocol is Waveshare's `esp_lcd_touch_cst3530` component, read
-//! from the board repository (`examples/esp-idf/components/`). Registers
+//! from the board repository
+//! ([waveshareteam/ESP32-C5-Touch-LCD-2.8](https://github.com/waveshareteam/ESP32-C5-Touch-LCD-2.8)
+//! at `77a7dce`, Apache-2.0, copyright Waveshare and Espressif Systems),
+//! `examples/esp-idf/components/waveshare__esp_lcd_touch_cst3530/`.
+//! Transcribed, not copied. Registers
 //! are 32 bits wide and sent big-endian; a read is a four-byte write
 //! followed by a separate read; every report is closed with a write to
 //! the end-read register, or the controller stops updating.
