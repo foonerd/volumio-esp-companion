@@ -46,9 +46,9 @@ flowchart LR
 | runtime | `runtime/` | The application: the loop as a state machine the device steps, the gesture derivation, the Volumio client, the album-art gate, the settings. `no_std`, generic over `hal`; the device owns threads, clock and I/O and calls in. | host and device |
 | platform | `platform/esp-idf/` | What every ESP board shares: Wi-Fi and provisioning, the configuration store in NVS, mDNS browse for the player, the HTTP client over mbedTLS. | device |
 | firmware | `firmware/<vendor>-<model>/` | The device. One crate per board, a workspace of its own with its target, toolchain, sdkconfig and partition table; the pin map, the bring-up, the expanders, the capabilities record; a thin `main.rs` that builds the board and hands it to the runtime. Its build is the image you flash. | that device |
-| sim | `sim/` | The runtime on a desktop window, talking to a real player, for page work without a board. | host |
+| sim | `sim/` | The application on a desktop window or in a PNG, talking to a real player, for page work without a board. The host's HTTP, interfaces and a thread for art stand in for the device. | host |
 
-Today: `hal/` holds the traits and the capabilities record; `core/` holds the pages, the surfaces and the player state model; `runtime/` holds the application, carried over from rpi-waveshare28 with its rules intact and reshaped so a device steps it; all three with their tests, building for bare-metal RISC-V; `firmware/waveshare-esp32-c5-touch-lcd-28/` boots its board and reports the chip, the PSRAM and the Wi-Fi. `drivers/`, `platform/` and `sim/` arrive next, in that order; the first driver is the CH32V003 IO expander, which on the Waveshare boards holds the display and touch resets and the backlight, so nothing lights before it.
+Today: `hal/` holds the traits and the capabilities record; `core/` holds the pages, the surfaces and the player state model; `runtime/` holds the application, carried over from rpi-waveshare28 with its rules intact and reshaped so a device steps it; all three with their tests, building for bare-metal RISC-V; `sim/` runs that application on a desktop against a real player; `firmware/waveshare-esp32-c5-touch-lcd-28/` boots its board and reports the chip, the PSRAM and the Wi-Fi. `drivers/` and `platform/` arrive next, in that order; the first driver is the CH32V003 IO expander, which on the Waveshare boards holds the display and touch resets and the backlight, so nothing lights before it.
 
 ```mermaid
 flowchart TB
@@ -58,7 +58,7 @@ flowchart TB
     runtime[runtime · no_std · the application]
     platform[platform/esp-idf · std + esp-idf-svc]
     firmware[firmware/&lt;vendor&gt;-&lt;model&gt; · the device, the image]
-    sim[sim · the runtime on a desktop window]
+    sim[sim · the application on a desktop]
 
     core --> hal
     runtime --> core
@@ -75,13 +75,22 @@ Arrows read "depends on". Nothing above `runtime` knows ESP-IDF; nothing in `cor
 
 ## Build
 
-The host workspace (`core`, `hal`, the drivers) builds on stable Rust, pinned by `rust-toolchain.toml`. Each firmware crate pins its own channel: ESP-IDF std targets need nightly with `rust-src`, plus `ldproxy` and python3 with esptool 5; the first build fetches ESP-IDF and the chip's toolchain.
+The host workspace (`core`, `hal`, `runtime`, `sim`, the drivers) builds on stable Rust, pinned by `rust-toolchain.toml`. Each firmware crate pins its own channel: ESP-IDF std targets need nightly with `rust-src`, plus `ldproxy` and python3 with esptool 5; the first build fetches ESP-IDF and the chip's toolchain.
 
 ```sh
 scripts/check.sh                                            # format, clippy, tests, docs, no_std on bare metal, scripts, then every firmware built
 (cd firmware/waveshare-esp32-c5-touch-lcd-28 && cargo build --release)
 scripts/image.sh firmware/waveshare-esp32-c5-touch-lcd-28   # the merged image and its parts into dist/
 ```
+
+The simulator runs the application against a player on the network, in a window (needs `libsdl2-dev`) or straight to a PNG (needs nothing):
+
+```sh
+cargo run -p companion-sim -- --player http://volumio.local:3000 --rotation 90 --theme night
+cargo run -p companion-sim --no-default-features -- --player http://volumio.local:3000 --snapshot face.png --after 5
+```
+
+The mouse is the finger; Escape quits. `--help` lists the settings it takes, which are the same keys a device reads from its store.
 
 `check.sh` refuses to pass on a machine without the ESP toolchain rather than report a pass that never built the product. Without the toolchain on the machine, the builder image of `scripts/builder/Dockerfile` has everything; the first build fetches ESP-IDF into the firmware crate's `.embuild/`, which the mounted checkout keeps:
 

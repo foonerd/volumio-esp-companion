@@ -4,6 +4,7 @@ members = [
     "core",
     "hal",
     "runtime",
+    "sim",
 ]
 # Each firmware crate is a workspace of its own: an ESP-IDF target, its own
 # toolchain channel and its own sdkconfig. Built from its directory.

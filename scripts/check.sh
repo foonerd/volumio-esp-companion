@@ -13,9 +13,27 @@ cd "$(dirname "$0")/.."
 
 echo "== host workspace"
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+# The simulator's window needs SDL2 to link. Where the library is absent the
+# simulator is still built and tested in its headless shape, and that is
+# said rather than skipped silently.
+if pkg-config --exists sdl2 2>/dev/null; then
+  sim_features=()
+else
+  echo "libsdl2-dev is not installed: the simulator is checked without its window"
+  sim_features=(--exclude companion-sim)
+fi
+cargo clippy --workspace "${sim_features[@]}" --all-targets -- -D warnings
+cargo test --workspace "${sim_features[@]}"
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace "${sim_features[@]}" --no-deps
+if [ "${#sim_features[@]}" -ne 0 ]; then
+  cargo clippy -p companion-sim --no-default-features --all-targets -- -D warnings
+  cargo test -p companion-sim --no-default-features
+  RUSTDOCFLAGS="-D warnings" cargo doc -p companion-sim --no-default-features --no-deps
+fi
+# The headless simulator is run once against a closed port: it must reach
+# the status page and write a PNG without a player or a window.
+cargo run -q -p companion-sim --no-default-features -- --player http://127.0.0.1:9 --snapshot target/sim-status.png --after 1
+test -s target/sim-status.png
 
 echo "== no_std, on bare metal"
 # core, hal and runtime claim no_std; proving it means building them for a
@@ -37,11 +55,13 @@ else
 fi
 
 echo "== firmware"
-if ! command -v ldproxy >/dev/null; then
-  echo "ldproxy is not on PATH: the firmware cannot be built on this machine." >&2
-  echo "  cargo install ldproxy; each firmware crate's rust-toolchain.toml names its channel." >&2
-  exit 1
-fi
+for tool in ldproxy cmake ninja; do
+  if ! command -v "$tool" >/dev/null; then
+    echo "$tool is not on PATH: the firmware cannot be built on this machine." >&2
+    echo "  Use the builder image (scripts/builder/Dockerfile), or install the ESP-IDF prerequisites and ldproxy." >&2
+    exit 1
+  fi
+done
 for crate in firmware/*/; do
   [ -f "$crate/Cargo.toml" ] || continue
   echo "-- $crate"

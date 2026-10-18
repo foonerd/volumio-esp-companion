@@ -21,10 +21,10 @@ LABEL org.opencontainers.image.source=https://github.com/foonerd/volumio-esp-com
 LABEL org.opencontainers.image.description="The machine Volumio ESP Companion's CI builds run on"
 
 # The apt list is the one esp-rs/esp-idf-template's devcontainer installs,
-# plus shellcheck for check.sh.
+# plus shellcheck for check.sh and libsdl2-dev for the simulator's window.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    ca-certificates curl file git xz-utils zip unzip shellcheck \
+    ca-certificates curl file git xz-utils zip unzip shellcheck libsdl2-dev \
     gcc libc6-dev make binutils pkg-config clang libudev-dev \
     wget flex bison gperf python3 python3-pip python3-venv \
     cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 \
