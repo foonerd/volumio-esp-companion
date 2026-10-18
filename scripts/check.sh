@@ -65,6 +65,18 @@ done
 for crate in firmware/*/; do
   [ -f "$crate/Cargo.toml" ] || continue
   echo "-- $crate"
+  # esp-idf-sys keeps its CMake build under target/ and reuses it across
+  # runs; a cache configured against another ESP-IDF version breaks the
+  # build (the toolchain file of the old tree is gone). Drop it when the
+  # pin in .cargo/config.toml and the cache disagree.
+  pin=$(sed -n 's/^ESP_IDF_VERSION *= *"\(.*\)"/\1/p' "$crate/.cargo/config.toml")
+  for cache in "$crate"target/*/release/build/esp-idf-sys/*/out/build/CMakeCache.txt; do
+    [ -f "$cache" ] || continue
+    if [ -n "$pin" ] && ! grep -q "esp-idf/$pin/" "$cache"; then
+      echo "   stale esp-idf-sys build (not $pin), removing"
+      rm -rf "${cache%/out/build/CMakeCache.txt}"
+    fi
+  done
   # The platform crate is formatted and linted through the firmware that
   # carries it; it has no build of its own.
   (cd "$crate" && cargo fmt --check && cargo fmt --check --manifest-path ../../platform/esp-idf/Cargo.toml \
