@@ -1,0 +1,17 @@
+[package]
+name = "companion-runtime"
+description = "Volumio ESP Companion: the application, generic over the HAL: the Volumio client, the gesture derivation, the album-art gate, the settings and the loop a device steps"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+companion-core = { path = "../core" }
+companion-hal = { path = "../hal" }
+embedded-graphics = "0.8"
+log = "0.4"

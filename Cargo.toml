@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "core",
     "hal",
+    "runtime",
 ]
 # Each firmware crate is a workspace of its own: an ESP-IDF target, its own
 # toolchain channel and its own sdkconfig. Built from its directory.

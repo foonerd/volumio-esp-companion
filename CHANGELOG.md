@@ -4,6 +4,8 @@ All notable changes to Volumio ESP Companion are recorded here. The format follo
 
 ## [Unreleased]
 
+- `runtime`: the application, carried over from rpi-waveshare28 `main.rs`, `input.rs` and the fetching halves of `state.rs`, `art.rs`, `http.rs` and `config.rs` at `61ecf6d`. The Pi's loop, threads and channels become a state machine a device steps with its own clock: `App::touch`, `App::step`, `App::art_request` / `App::art_arrived`. The gesture derivation, the Volumio REST client, the album-art gate with its backoff, the settings keys and the request-target encoding come with their tests (37). `no_std` with `alloc`; builds for bare-metal RISC-V, which `scripts/check.sh` now proves for it too.
+- `core`: `PlayerState::parse`; `StatusText`, `BarGap` and `Strip` gain the `as_str` / `parse` pair `Theme` had, for the settings store.
 - `hal`: the traits a device implements (touch source, HTTP GET, config store, network status, player discovery, frame present) and the capabilities record a firmware declares as a const. `no_std` with `alloc`.
 - `core`: the pages, the transient surfaces, the player state model and the Volumio command shapes, carried over from rpi-waveshare28 at `61ecf6d` with their 48 tests. `no_std` with `alloc`; the fetching and the settings stay in the runtime. Builds for bare-metal RISC-V, which `scripts/check.sh` now proves.
 - `firmware/waveshare-esp32-c5-touch-lcd-28`: the first firmware, std Rust on ESP-IDF v5.5.6. On boot it reports the chip model and revision, the PSRAM and heap sizes, a dual-band Wi-Fi scan with each access point's band, channel, strength and auth, an optional connection when credentials were given at build time, and a heap heartbeat every five seconds. No panel, touch or audio yet.

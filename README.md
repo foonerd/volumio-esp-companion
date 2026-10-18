@@ -43,19 +43,19 @@ flowchart LR
 | core | `core/` | The pages, the drawing surface, the player state model and the Volumio protocol types. `no_std`, no `unsafe`, no platform crate. | host and device |
 | hal | `hal/` | The traits the core and the runtime talk to (touch source, network transport, configuration store) and the capabilities record a firmware fills in: resolution, PSRAM, microphone, speaker, IMU, Wi-Fi bands. The display is embedded-graphics' `DrawTarget`. | host and device |
 | drivers | `drivers/<chip>/` | One crate per controller chip, over embedded-hal, vendor-neutral. SPI panels through mipidsi. | host and device |
-| runtime | `runtime/` | The application: the loop that ties touch, state, pages and display together, the Volumio client, the art. std, portable, generic over `hal`. | host and device |
+| runtime | `runtime/` | The application: the loop as a state machine the device steps, the gesture derivation, the Volumio client, the album-art gate, the settings. `no_std`, generic over `hal`; the device owns threads, clock and I/O and calls in. | host and device |
 | platform | `platform/esp-idf/` | What every ESP board shares: Wi-Fi and provisioning, the configuration store in NVS, mDNS browse for the player, the HTTP client over mbedTLS. | device |
 | firmware | `firmware/<vendor>-<model>/` | The device. One crate per board, a workspace of its own with its target, toolchain, sdkconfig and partition table; the pin map, the bring-up, the expanders, the capabilities record; a thin `main.rs` that builds the board and hands it to the runtime. Its build is the image you flash. | that device |
 | sim | `sim/` | The runtime on a desktop window, talking to a real player, for page work without a board. | host |
 
-Today: `hal/` holds the traits and the capabilities record; `core/` holds the pages, the surfaces and the player state model, carried over from rpi-waveshare28 with their tests and building for bare-metal RISC-V; `firmware/waveshare-esp32-c5-touch-lcd-28/` boots its board and reports the chip, the PSRAM and the Wi-Fi. `drivers/`, `runtime/`, `platform/` and `sim/` arrive next, in that order; the first driver is the CH32V003 IO expander, which on the Waveshare boards holds the display and touch resets and the backlight, so nothing lights before it.
+Today: `hal/` holds the traits and the capabilities record; `core/` holds the pages, the surfaces and the player state model; `runtime/` holds the application, carried over from rpi-waveshare28 with its rules intact and reshaped so a device steps it; all three with their tests, building for bare-metal RISC-V; `firmware/waveshare-esp32-c5-touch-lcd-28/` boots its board and reports the chip, the PSRAM and the Wi-Fi. `drivers/`, `platform/` and `sim/` arrive next, in that order; the first driver is the CH32V003 IO expander, which on the Waveshare boards holds the display and touch resets and the backlight, so nothing lights before it.
 
 ```mermaid
 flowchart TB
     core[core · no_std · pages, surface, state, protocol types]
     hal[hal · no_std · traits + capabilities]
     drivers[drivers/&lt;chip&gt; · no_std · embedded-hal]
-    runtime[runtime · std, portable · the application]
+    runtime[runtime · no_std · the application]
     platform[platform/esp-idf · std + esp-idf-svc]
     firmware[firmware/&lt;vendor&gt;-&lt;model&gt; · the device, the image]
     sim[sim · the runtime on a desktop window]
@@ -71,7 +71,7 @@ flowchart TB
     sim --> runtime
 ```
 
-Arrows read "depends on". Nothing above `runtime` knows ESP-IDF; nothing in `core` or `hal` knows std. The layers are the point. A new board is one crate under `firmware/`: its pins, its bring-up order and a filled-in capabilities record, and every page, the touch handling and the Volumio client come with it. A new controller chip is one crate under `drivers/`, written once against embedded-hal, and every board that carries the chip uses it. Nothing in `core/` knows a vendor's name.
+Arrows read "depends on". Nothing above `runtime` knows ESP-IDF; nothing in `core`, `hal` or `runtime` knows std. The layers are the point. A new board is one crate under `firmware/`: its pins, its bring-up order and a filled-in capabilities record, and every page, the touch handling and the Volumio client come with it. A new controller chip is one crate under `drivers/`, written once against embedded-hal, and every board that carries the chip uses it. Nothing in `core/` knows a vendor's name.
 
 ## Build
 

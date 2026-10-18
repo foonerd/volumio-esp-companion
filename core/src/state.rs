@@ -179,6 +179,11 @@ pub struct PlayerState {
 }
 
 impl PlayerState {
+    /// Parse a `getState` body. The error is the parser's message.
+    pub fn parse(body: &str) -> Result<Self, String> {
+        serde_json::from_str(body).map_err(|e| e.to_string())
+    }
+
     /// True when the player is actively playing.
     pub fn is_playing(&self) -> bool {
         self.status.as_deref() == Some("play")

@@ -21,6 +21,25 @@ pub enum StatusText {
     Large,
 }
 
+impl StatusText {
+    /// The settings-store spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Normal => "normal",
+            Self::Large => "large",
+        }
+    }
+
+    /// The type size a settings-store spelling names, if any.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "normal" => Some(Self::Normal),
+            "large" => Some(Self::Large),
+            _ => None,
+        }
+    }
+}
+
 /// Named gap step between the volume and progress bars.
 ///
 /// The face layout ignores this: the boxes are fixed. The key stays so a
@@ -35,6 +54,27 @@ pub enum BarGap {
     Default,
     /// The largest gap.
     Roomy,
+}
+
+impl BarGap {
+    /// The settings-store spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Tight => "tight",
+            Self::Default => "default",
+            Self::Roomy => "roomy",
+        }
+    }
+
+    /// The gap a settings-store spelling names, if any.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "tight" => Some(Self::Tight),
+            "default" => Some(Self::Default),
+            "roomy" => Some(Self::Roomy),
+            _ => None,
+        }
+    }
 }
 
 /// What occupies the seek slot on the resting face.
@@ -52,6 +92,27 @@ pub enum Strip {
     Stream,
     /// Nothing; art takes the room.
     Off,
+}
+
+impl Strip {
+    /// The settings-store spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Progress => "progress",
+            Self::Stream => "stream",
+            Self::Off => "off",
+        }
+    }
+
+    /// The strip a settings-store spelling names, if any.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "progress" => Some(Self::Progress),
+            "stream" => Some(Self::Stream),
+            "off" => Some(Self::Off),
+            _ => None,
+        }
+    }
 }
 
 /// Named colour set. Tokens, not a CSS engine. `ink` is the shipped panel;
@@ -105,6 +166,21 @@ mod tests {
         }
         assert_eq!(Theme::parse(" Night "), Some(Theme::Night));
         assert_eq!(Theme::parse("neon"), None);
+    }
+
+    #[test]
+    fn the_other_spellings_round_trip_too() {
+        for s in [StatusText::Normal, StatusText::Large] {
+            assert_eq!(StatusText::parse(s.as_str()), Some(s));
+        }
+        for g in [BarGap::Tight, BarGap::Default, BarGap::Roomy] {
+            assert_eq!(BarGap::parse(g.as_str()), Some(g));
+        }
+        for s in [Strip::Progress, Strip::Stream, Strip::Off] {
+            assert_eq!(Strip::parse(s.as_str()), Some(s));
+        }
+        assert_eq!(Strip::parse("OFF"), Some(Strip::Off));
+        assert_eq!(BarGap::parse("wide"), None);
     }
 
     #[test]

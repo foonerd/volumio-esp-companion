@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# The project's check. Host workspace first (core, hal, the driver crates):
-# format, clippy with warnings denied, tests, docs with warnings denied. Then
-# the scripts. Then every firmware crate, formatted and built for its device.
+# The project's check. Host workspace first (core, hal, runtime, the driver
+# crates): format, clippy with warnings denied, tests, docs with warnings
+# denied. Then the scripts. Then every firmware crate, formatted and built for
+# its device.
 #
 # The firmware step needs the ESP toolchain (ldproxy on PATH; each crate's
 # rust-toolchain.toml pulls its channel). Without it the check fails and says
@@ -17,15 +18,15 @@ cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 
 echo "== no_std, on bare metal"
-# core and hal claim no_std; proving it means building them for a target
-# that has no std at all. The RISC-V target the C5 and C6 firmware use,
-# minus ESP-IDF.
+# core, hal and runtime claim no_std; proving it means building them for a
+# target that has no std at all. The RISC-V target the C5 and C6 firmware
+# use, minus ESP-IDF.
 bare=riscv32imac-unknown-none-elf
 if ! rustup target list --installed | grep -qx "$bare"; then
   echo "target $bare is not installed: rustup target add $bare" >&2
   exit 1
 fi
-cargo build -p companion-core -p companion-hal --target "$bare"
+cargo build -p companion-core -p companion-hal -p companion-runtime --target "$bare"
 
 echo "== scripts"
 for f in scripts/*.sh; do bash -n "$f"; done
