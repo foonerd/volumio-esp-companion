@@ -1,0 +1,4 @@
+# The build reads only the toolchain files from the context.
+*
+!rust-toolchain.toml
+!firmware/*/rust-toolchain.toml
