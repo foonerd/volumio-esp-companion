@@ -4,15 +4,27 @@ The firmware for the Waveshare ESP32-C5-Touch-LCD-2.8: ESP32-C5-WROOM-1 (RISC-V,
 
 ## What it does today
 
-Boots on std Rust over ESP-IDF and proves the stack from the ROM up to the player. It touches no board peripheral yet: no panel, no touch, no audio. On boot it logs, in order:
+Boots on std Rust over ESP-IDF, brings the board up and runs the application on it. On boot it logs, in order:
 
 1. Chip: the target it was built for, the model the ROM reports (23, `esp32c5`), the revision, the cores and the feature flags
 2. Memory: the PSRAM detected, the internal and SPIRAM heap totals
 3. Wi-Fi, through `platform/esp-idf`'s `WifiNet`: the driver started, the band mode set to AUTO (2.4 and 5 GHz) and read back, then a scan listing every access point with its band, channel, strength and auth. Any access point on a channel above 14 proves 5 GHz receive.
 4. A connection, only if `WIFI_SSID` and `WIFI_PASS` were set at build time: channel, band, and the hostname and addresses as the status page reads them through `NetworkStatus`
 5. The settings, read from the NVS namespace `companion` through `NvsStore` (the runtime's keys; defaults when the namespace is empty)
-6. With a connection, one `GET /status` to the configured player (`player` key, default `http://volumio.local:3000`) through the platform's `Http` client: the body, or why not
-7. A heartbeat every 5 s with the free heap and its low-water mark
+6. The board (`src/board.rs`), in the vendor BSP's order: the CH32V003 expander up with its outputs high; the panel reset pulsed through it (200 ms low, 200 ms settled); the ST7789 initialised through mipidsi over SPI2 at 40 MHz, RGB565 inverted, rotated as the settings say; the CST3530 reset through the expander (10 ms each side); the touch interrupt on GPIO5
+7. The application: `companion-runtime`'s `App` draws its first frame, then the backlight comes on through the expander's PWM, so nothing shows before the first frame. From here the loop steps the application every 40 ms: the status page with the hostname and address until the player answers `/status` and `getState`, then the face; the touch controller is read while its interrupt is low and the gestures go to the pages
+8. A heartbeat every 30 s with the free heap, its low-water mark and whether the player is up
+
+Album art is not fetched yet: the face draws without it. Audio is not touched.
+
+### Pins and parts, as the board module names them
+
+| Part | Where |
+| --- | --- |
+| I2C (expander, touch, codec, IMU, RTC) | SDA GPIO0, SCL GPIO1, 400 kHz, one bus shared through `embedded-hal-bus` |
+| CH32V003 expander | I2C `0x24`: EXIO0 touch reset, EXIO1 panel reset, EXIO3 amplifier enable, PWM backlight |
+| ST7789 panel | SPI2: SCK GPIO6, MOSI GPIO7, MISO GPIO8 (the TF card's), CS GPIO10, DC GPIO9; no reset pin of its own |
+| CST3530 touch | I2C `0x58`, INT GPIO5 pulled up, reset on EXIO0 |
 
 ## Stack
 
@@ -60,6 +72,9 @@ Then read the log at 115200 on the same port.
 
 ## Known gaps
 
+- Not yet seen on a board. The bring-up order, the panel's inversion and colour order, the touch controller's protocol and the expander's bit sense are the vendor BSP's, read from its source; the first bench run confirms or corrects them, and the panel clock (40 MHz, half the BSP's) goes up once the frames are clean.
+- Album art: the runtime asks for covers; this firmware does not fetch or decode them yet. The 8 MB PSRAM and a 3 MB factory partition (the app is 1.6 MB) leave room for a decoder.
+- The touch controller is polled while its interrupt line is low, from the 40 ms loop, rather than woken by the edge. Fine for a finger; the edge-driven version comes with the first bench measurements.
 - `esp_chip_info()` is not in esp-idf-sys 0.38.1's generated bindings. It is declared by hand in `src/main.rs`, with the struct layout checked against ESP-IDF v5.5.6 `esp_chip_info.h`.
 - The image name embedded by ESP-IDF reads `libespidf` (ESP-IDF's placeholder project name). Cosmetic.
 - Flash is declared as 4 MB on a 32 MB board on purpose: smaller than the part is safe, and a bring-up image has no reason to touch addresses above 16 MB. The partition plan proper (OTA slots, an art cache) comes with the pages.

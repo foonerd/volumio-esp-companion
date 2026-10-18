@@ -15,12 +15,16 @@ harness = false
 [workspace]
 
 [dependencies]
+ch32v003-expander = { path = "../../drivers/ch32v003-expander" }
 companion-hal = { path = "../../hal" }
 companion-platform-esp-idf = { path = "../../platform/esp-idf" }
 companion-runtime = { path = "../../runtime" }
+cst3530 = { path = "../../drivers/cst3530" }
+embedded-hal-bus = "0.3"
 esp-idf-svc = { version = "0.53", features = ["std", "binstart"] }
 log = "0.4"
 anyhow = "1"
+mipidsi = "0.10"
 
 [build-dependencies]
 embuild = "0.33.5"

@@ -193,6 +193,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
+name = "ch32v003-expander"
+version = "0.1.0"
+dependencies = [
+ "embedded-hal 1.0.0",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -321,6 +328,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
 
 [[package]]
+name = "cst3530"
+version = "0.1.0"
+dependencies = [
+ "companion-hal",
+ "embedded-hal 1.0.0",
+]
+
+[[package]]
 name = "cvt"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -417,7 +432,7 @@ dependencies = [
  "embedded-io-async",
  "futures-core",
  "futures-sink",
- "heapless",
+ "heapless 0.9.3",
 ]
 
 [[package]]
@@ -478,6 +493,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-hal-bus"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513e0b3a8fb7d3013a8ae17a834283f170deaf7d0eeab0a7c1a36ad4dd356d22"
+dependencies = [
+ "critical-section",
+ "embedded-hal 1.0.0",
+]
+
+[[package]]
 name = "embedded-hal-nb"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -512,7 +537,7 @@ dependencies = [
  "embedded-io",
  "embedded-io-async",
  "enumset",
- "heapless",
+ "heapless 0.9.3",
  "num_enum",
  "serde",
  "strum 0.27.2",
@@ -607,7 +632,7 @@ dependencies = [
  "embuild",
  "enumset",
  "esp-idf-sys",
- "heapless",
+ "heapless 0.9.3",
  "log",
  "nb 1.1.0",
 ]
@@ -625,7 +650,7 @@ dependencies = [
  "enumset",
  "esp-idf-hal",
  "futures-io",
- "heapless",
+ "heapless 0.9.3",
  "log",
  "num_enum",
  "uncased",
@@ -795,6 +820,16 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+
+[[package]]
+name = "heapless"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
+dependencies = [
+ "hash32",
+ "stable_deref_trait",
+]
 
 [[package]]
 name = "heapless"
@@ -975,6 +1010,17 @@ name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
+
+[[package]]
+name = "mipidsi"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "790ebd28bd67addbccf41b1c0c188c26bb9f5bdcd91d4d6da9bd558e20d97a1d"
+dependencies = [
+ "embedded-graphics-core",
+ "embedded-hal 1.0.0",
+ "heapless 0.8.0",
+]
 
 [[package]]
 name = "nb"
@@ -1577,12 +1623,16 @@ name = "waveshare-esp32-c5-touch-lcd-28"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ch32v003-expander",
  "companion-hal",
  "companion-platform-esp-idf",
  "companion-runtime",
+ "cst3530",
+ "embedded-hal-bus",
  "embuild",
  "esp-idf-svc",
  "log",
+ "mipidsi",
 ]
 
 [[package]]
