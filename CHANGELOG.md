@@ -4,6 +4,11 @@ All notable changes to Volumio ESP Companion are recorded here. The format follo
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-18
+
+First release: the Waveshare ESP32-C5-Touch-LCD-2.8 runs the player's face, configured by a microSD card.
+
+- Fast boot: after a join the firmware remembers the access point's channel and BSSID and goes straight there next time, about three seconds to an address; the face at seven seconds instead of eighteen. A hint that does not answer within ten seconds falls back to the full search, which keeps the complete scan so the first join picks the strongest BSS.
 - Release workflow (`.github/workflows/release.yml`): a `v*` tag runs the full check, builds the image, refuses a tag that does not match the firmware crate's version, and publishes the image, its parts, `SHA256SUMS` and the card template with the install steps for Windows, macOS and Linux as the release notes. A manual run builds and uploads without publishing.
 - `name` in `volumio.txt`: the device's network name (a DNS label of up to 30 letters, digits and hyphens), given to DHCP so the router's device list shows it; default `espressif`. The face prints the bare name: there is no mDNS responder in the build yet, so a `.local` suffix would name something that does not answer.
 - First runs with a card and a player. The face came up and the board rebooted every 31 s: the album-art thread overflowed its 48 KB stack inside the JPEG decoder (the desktop measurement was 1.5 KB short of the device). The thread's stack is now 256 KB in PSRAM and the heartbeat reports its low-water mark. The Wi-Fi scan, a bring-up diagnostic, runs only when no network is set, which takes 12 s off every boot. Seen on the board: the cover, a tap, a swipe.
