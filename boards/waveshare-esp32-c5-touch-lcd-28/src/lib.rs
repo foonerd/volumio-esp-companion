@@ -16,8 +16,9 @@
 //!
 //! The order is the BSP's: the expander up with its outputs high, the
 //! panel reset pulsed 200 ms low and 200 ms settled, the panel
-//! initialised, the touch reset pulsed 10 ms each side, the backlight
-//! last so nothing shows before the first frame. The SPI bus is made
+//! initialised, the touch reset pulsed 10 ms low and then waited out
+//! until the controller answers on the bus, the backlight last so
+//! nothing shows before the first frame. The SPI bus is made
 //! before any of it ([`spi_bus`]) so the card can be read first.
 
 use std::cell::RefCell;
@@ -61,6 +62,9 @@ pub const CAPABILITIES: Capabilities = Capabilities {
 /// SPI clock to the panel. The BSP runs 80 MHz; half that until the
 /// first frames on the bench say the wiring takes more.
 const PANEL_HZ: u32 = 40_000_000;
+
+/// The longest the touch controller is given to answer after its reset.
+const TOUCH_BOOT_MS: u32 = 500;
 
 /// The expander lines this board drives.
 const TOUCH_RST: Exio = Exio::P0;
@@ -177,10 +181,23 @@ pub fn bring_up(pins: Pins, spi: Spi, rotation: u16) -> Result<Board, BringUpErr
     expander.set(TOUCH_RST, false)?;
     FreeRtos::delay_ms(10);
     expander.set(TOUCH_RST, true)?;
-    FreeRtos::delay_ms(10);
-    let touch = Cst3530::new(RefCellDevice::new(bus));
+    let mut touch = Cst3530::new(RefCellDevice::new(bus));
+    // The controller boots after reset and is not to be spoken to, nor
+    // the bus used, until it answers; a codec written to in that window
+    // got a bus timeout on the bench.
+    let mut waited = 0u32;
+    loop {
+        FreeRtos::delay_ms(10);
+        waited += 10;
+        if touch.report().is_ok() {
+            break;
+        }
+        if waited >= TOUCH_BOOT_MS {
+            return Err(BringUpError::Touch(waited));
+        }
+    }
     let touch_int = PinDriver::input(pins.touch_int, Pull::Up)?;
-    log::info!("touch: reset, interrupt on GPIO5");
+    log::info!("touch: reset, answering after {waited} ms, interrupt on GPIO5");
 
     Ok(Board {
         panel,
@@ -207,6 +224,9 @@ pub enum BringUpError {
     I2c(I2cError),
     /// The panel did not initialise.
     Panel(String),
+    /// The touch controller did not answer within this many milliseconds
+    /// of its reset.
+    Touch(u32),
 }
 
 impl std::fmt::Display for BringUpError {
@@ -215,6 +235,9 @@ impl std::fmt::Display for BringUpError {
             Self::Esp(e) => write!(f, "{e}"),
             Self::I2c(e) => write!(f, "i2c: {e}"),
             Self::Panel(e) => write!(f, "panel: {e}"),
+            Self::Touch(ms) => {
+                write!(f, "touch: no answer {ms} ms after reset")
+            }
         }
     }
 }

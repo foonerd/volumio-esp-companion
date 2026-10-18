@@ -4,6 +4,7 @@ All notable changes to Volumio ESP Companion are recorded here. The format follo
 
 ## [Unreleased]
 
+- `boards/waveshare-esp32-c5-touch-lcd-28`: after the touch controller's reset the board waits until it answers on the bus (bounded at 500 ms, the wait logged) instead of a fixed 10 ms; a codec written to during the controller's boot got an I2C timeout on the bench. `BringUpError::Touch` names a controller that never answered.
 - `boards/waveshare-esp32-c5-touch-lcd-28`: the board's bring-up (expander, ST7789 panel, CST3530 touch, backlight, the shared SPI and I2C buses) moved out of the firmware into a library crate, `companion-board-waveshare-esp32-c5-touch-lcd-28`, so a second firmware can stand on the board; `Board` now hands out the I2C bus for a codec or a DAC. The companion firmware is unchanged in behaviour. Excluded from the host workspace like `platform/esp-idf`; `check.sh` formats and lints it through the firmware.
 - `drivers/es9018k2m`: the ESS ES9018K2M stereo DAC as Pi HATs carry it (LightSABRE, I-Sabre K2M class): detection by the status register, the bring-up sequence, volume on the plugin's 0 to 100 curve, mute. Register sequence from es9018k2m-plugin (MIT). `no_std`, four tests, bare-metal in `check.sh`. Not yet on a board.
 
