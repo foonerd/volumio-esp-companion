@@ -4,13 +4,15 @@ The firmware for the Waveshare ESP32-C5-Touch-LCD-2.8: ESP32-C5-WROOM-1 (RISC-V,
 
 ## What it does today
 
-Boots on std Rust over ESP-IDF and proves the stack from the ROM up. It touches no board peripheral yet: no panel, no touch, no audio. On boot it logs, in order:
+Boots on std Rust over ESP-IDF and proves the stack from the ROM up to the player. It touches no board peripheral yet: no panel, no touch, no audio. On boot it logs, in order:
 
 1. Chip: the target it was built for, the model the ROM reports (23, `esp32c5`), the revision, the cores and the feature flags
 2. Memory: the PSRAM detected, the internal and SPIRAM heap totals
-3. Wi-Fi: the driver started, the band mode set to AUTO (2.4 and 5 GHz) and read back, then a scan listing every access point with its band, channel, strength and auth. Any access point on a channel above 14 proves 5 GHz receive.
-4. A connection, only if `WIFI_SSID` and `WIFI_PASS` were set at build time: channel, band and the DHCP address
-5. A heartbeat every 5 s with the free heap and its low-water mark
+3. Wi-Fi, through `platform/esp-idf`'s `WifiNet`: the driver started, the band mode set to AUTO (2.4 and 5 GHz) and read back, then a scan listing every access point with its band, channel, strength and auth. Any access point on a channel above 14 proves 5 GHz receive.
+4. A connection, only if `WIFI_SSID` and `WIFI_PASS` were set at build time: channel, band, and the hostname and addresses as the status page reads them through `NetworkStatus`
+5. The settings, read from the NVS namespace `companion` through `NvsStore` (the runtime's keys; defaults when the namespace is empty)
+6. With a connection, one `GET /status` to the configured player (`player` key, default `http://volumio.local:3000`) through the platform's `Http` client: the body, or why not
+7. A heartbeat every 5 s with the free heap and its low-water mark
 
 ## Stack
 

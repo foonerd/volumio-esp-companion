@@ -5,25 +5,33 @@
 //! 1. The image boots and Rust std runs (log output, threads, heap).
 //! 2. Chip identity and revision as the ROM/IDF report them.
 //! 3. PSRAM detected and sized (board has 8 MB).
-//! 4. Wi-Fi driver starts, dual-band mode accepted, scan returns APs.
-//!    Any AP on channel > 14 proves 5 GHz receive.
+//! 4. Wi-Fi driver starts through the platform crate, dual-band mode
+//!    accepted, scan returns APs. Any AP on channel > 14 proves 5 GHz.
 //! 5. Optional: if WIFI_SSID / WIFI_PASS were set at build time, connect
-//!    and report the DHCP address.
+//!    and report the DHCP address and what the status page would show.
+//! 6. The settings read from NVS through the platform's store, and one
+//!    `GET /status` to the configured player through its HTTP client.
 //!
 //! No board peripherals (display, touch, audio) are touched yet.
 
 use std::time::Duration;
 
+use companion_hal::{HttpClient, NetworkStatus};
+use companion_platform_esp_idf::{Http, NvsStore, WifiNet};
+use companion_runtime::Settings;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys;
-use esp_idf_svc::wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi};
+use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
 use log::{info, warn};
 
 const SSID: Option<&str> = option_env!("WIFI_SSID");
 const PASS: Option<&str> = option_env!("WIFI_PASS");
+
+/// The NVS namespace the settings live in.
+const SETTINGS_NAMESPACE: &str = "companion";
 
 fn main() -> anyhow::Result<()> {
     sys::link_patches();
@@ -41,25 +49,37 @@ fn main() -> anyhow::Result<()> {
     let sys_loop = EspSystemEventLoop::take()?;
     let nvs = EspDefaultNvsPartition::take()?;
 
-    let mut wifi = BlockingWifi::wrap(
-        EspWifi::new(peripherals.modem, sys_loop.clone(), Some(nvs))?,
-        sys_loop,
-    )?;
-
-    // Station mode with an empty config is enough to scan.
-    wifi.set_configuration(&Configuration::Client(ClientConfiguration::default()))?;
-    wifi.start()?;
+    let mut net = WifiNet::start(peripherals.modem, sys_loop, nvs.clone())?;
     info!("wifi: started");
 
     set_dual_band();
-    scan(&mut wifi);
+    scan(net.wifi_mut());
 
     if let (Some(ssid), Some(pass)) = (SSID, PASS) {
-        if let Err(e) = connect(&mut wifi, ssid, pass) {
-            warn!("wifi: connect to '{ssid}' failed: {e:?}");
+        match net.connect(ssid, pass) {
+            Ok(()) => report_link(&mut net, ssid),
+            Err(e) => warn!("wifi: connect to '{ssid}' failed: {e:?}"),
         }
     } else {
         info!("wifi: no WIFI_SSID/WIFI_PASS at build time, connect step skipped");
+    }
+
+    let store = NvsStore::open(nvs, SETTINGS_NAMESPACE)?;
+    let settings = Settings::load(&store);
+    info!(
+        "settings: player {}, rotation {}, theme {}, strip {}",
+        settings.player,
+        settings.rotation,
+        settings.theme.as_str(),
+        settings.strip().as_str()
+    );
+
+    if net.wifi().is_up().unwrap_or(false) {
+        let url = format!("{}/status", settings.player);
+        match Http::new().get_text(&url, Duration::from_secs(5)) {
+            Ok(body) => info!("player: GET {url} -> {:?}", body.trim()),
+            Err(e) => warn!("player: GET {url} failed: {e}"),
+        }
     }
 
     let mut n: u32 = 0;
@@ -71,6 +91,24 @@ fn main() -> anyhow::Result<()> {
         info!("heartbeat {n}: free heap {free} B, low-water {min} B");
         std::thread::sleep(Duration::from_secs(5));
     }
+}
+
+/// What the status page would show, through the same trait it reads.
+fn report_link(net: &mut WifiNet, ssid: &str) {
+    let host = net.host_info();
+    let mut ch: u8 = 0;
+    let mut second: sys::wifi_second_chan_t = 0;
+    // SAFETY: writes into caller-owned values.
+    unsafe { sys::esp_wifi_get_channel(&mut ch, &mut second) };
+    let band = if ch > 14 { "5 GHz" } else { "2.4 GHz" };
+    info!(
+        "wifi: connected to '{ssid}' on ch {ch} ({band}); host {:?}, addresses {:?}",
+        host.hostname,
+        host.addrs
+            .iter()
+            .map(|a| a.addr.as_str())
+            .collect::<Vec<_>>()
+    );
 }
 
 // esp_chip_info.h is not in esp-idf-sys 0.38.1's generated bindings.
@@ -152,39 +190,4 @@ fn scan(wifi: &mut BlockingWifi<EspWifi<'static>>) {
         }
         Err(e) => warn!("scan: failed: {e:?}"),
     }
-}
-
-fn connect(
-    wifi: &mut BlockingWifi<EspWifi<'static>>,
-    ssid: &str,
-    pass: &str,
-) -> anyhow::Result<()> {
-    let auth = if pass.is_empty() {
-        AuthMethod::None
-    } else {
-        AuthMethod::WPA2Personal
-    };
-    wifi.set_configuration(&Configuration::Client(ClientConfiguration {
-        ssid: ssid
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("ssid too long"))?,
-        password: pass
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("password too long"))?,
-        auth_method: auth,
-        ..Default::default()
-    }))?;
-    wifi.connect()?;
-    wifi.wait_netif_up()?;
-    let ip = wifi.wifi().sta_netif().get_ip_info()?;
-    let mut ch: u8 = 0;
-    let mut second: sys::wifi_second_chan_t = 0;
-    // SAFETY: writes into caller-owned values.
-    unsafe { sys::esp_wifi_get_channel(&mut ch, &mut second) };
-    let band = if ch > 14 { "5 GHz" } else { "2.4 GHz" };
-    info!(
-        "wifi: connected to '{ssid}' on ch {ch} ({band}), ip {:?}",
-        ip.ip
-    );
-    Ok(())
 }

@@ -15,6 +15,9 @@ harness = false
 [workspace]
 
 [dependencies]
+companion-hal = { path = "../../hal" }
+companion-platform-esp-idf = { path = "../../platform/esp-idf" }
+companion-runtime = { path = "../../runtime" }
 esp-idf-svc = { version = "0.53", features = ["std", "binstart"] }
 log = "0.4"
 anyhow = "1"

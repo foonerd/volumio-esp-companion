@@ -1,0 +1,22 @@
+[package]
+name = "companion-platform-esp-idf"
+description = "Volumio ESP Companion: what every ESP board shares, over esp-idf-svc: the HTTP client, the settings store in NVS and the network status the application needs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/foonerd/volumio-esp-companion"
+publish = false
+
+# Built only inside a firmware crate's workspace: esp-idf-svc compiles for
+# ESP-IDF targets alone, so the host workspace excludes this crate and the
+# firmware's build carries it.
+
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+unused_qualifications = "warn"
+
+[dependencies]
+companion-hal = { path = "../../hal" }
+esp-idf-svc = { version = "0.53", default-features = false, features = ["std", "alloc"] }
+log = "0.4"

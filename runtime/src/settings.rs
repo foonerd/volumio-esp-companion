@@ -15,7 +15,14 @@ use companion_core::{BarGap, Layout, StatusText, Strip, Theme};
 use companion_hal::ConfigStore;
 
 /// Store keys. One spelling, used by every device and by the settings UI.
+///
+/// Every key is at most [`key::MAX_KEY_LEN`] bytes: ESP-IDF's NVS, the store on
+/// every ESP32, refuses longer names, and a key that works on one device
+/// and not another is not one spelling.
 pub mod key {
+    /// The longest key any store must accept (NVS: 15 bytes plus the NUL).
+    pub const MAX_KEY_LEN: usize = 15;
+
     /// The player's origin: `http://host:3000`.
     pub const PLAYER: &str = "player";
     /// Rotation in degrees clockwise: 0, 90, 180 or 270.
@@ -23,21 +30,36 @@ pub mod key {
     /// Colour theme: `ink`, `dusk`, `studio`, `night`.
     pub const THEME: &str = "theme";
     /// Status-screen type on portrait rotations.
-    pub const STATUS_TEXT_PORTRAIT: &str = "status_text.portrait";
+    pub const STATUS_TEXT_PORTRAIT: &str = "text_portrait";
     /// Status-screen type on landscape rotations.
-    pub const STATUS_TEXT_LANDSCAPE: &str = "status_text.landscape";
+    pub const STATUS_TEXT_LANDSCAPE: &str = "text_landscape";
     /// Bar gap on portrait rotations.
-    pub const BAR_GAP_PORTRAIT: &str = "bar_gap.portrait";
+    pub const BAR_GAP_PORTRAIT: &str = "gap_portrait";
     /// Bar gap on landscape rotations.
-    pub const BAR_GAP_LANDSCAPE: &str = "bar_gap.landscape";
+    pub const BAR_GAP_LANDSCAPE: &str = "gap_landscape";
     /// Strip occupancy on portrait rotations.
-    pub const STRIP_PORTRAIT: &str = "strip.portrait";
+    pub const STRIP_PORTRAIT: &str = "strip_portrait";
     /// Strip occupancy on landscape rotations.
-    pub const STRIP_LANDSCAPE: &str = "strip.landscape";
+    pub const STRIP_LANDSCAPE: &str = "strip_landscape";
     /// State poll interval, milliseconds.
     pub const POLL_MS: &str = "poll_ms";
     /// Minimum gap between two accepted press-downs, milliseconds.
-    pub const TOUCH_DEBOUNCE_MS: &str = "touch_debounce_ms";
+    pub const TOUCH_DEBOUNCE_MS: &str = "debounce_ms";
+
+    /// Every key, for a store or a settings page to iterate.
+    pub const ALL: &[&str] = &[
+        PLAYER,
+        ROTATION,
+        THEME,
+        STATUS_TEXT_PORTRAIT,
+        STATUS_TEXT_LANDSCAPE,
+        BAR_GAP_PORTRAIT,
+        BAR_GAP_LANDSCAPE,
+        STRIP_PORTRAIT,
+        STRIP_LANDSCAPE,
+        POLL_MS,
+        TOUCH_DEBOUNCE_MS,
+    ];
 }
 
 /// What the application needs to know before it starts.
@@ -259,6 +281,15 @@ mod tests {
     #[test]
     fn an_empty_store_is_the_defaults() {
         assert_eq!(Settings::load(&Map(Vec::new())), Settings::default());
+    }
+
+    #[test]
+    fn every_key_fits_an_nvs_name() {
+        for k in key::ALL {
+            assert!(k.len() <= key::MAX_KEY_LEN, "{k} is {} bytes", k.len());
+            assert!(k.is_ascii(), "{k}");
+        }
+        assert_eq!(key::ALL.len(), 11);
     }
 
     #[test]

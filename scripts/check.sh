@@ -65,7 +65,11 @@ done
 for crate in firmware/*/; do
   [ -f "$crate/Cargo.toml" ] || continue
   echo "-- $crate"
-  (cd "$crate" && cargo fmt --check && cargo clippy --release -- -D warnings && cargo build --release)
+  # The platform crate is formatted and linted through the firmware that
+  # carries it; it has no build of its own.
+  (cd "$crate" && cargo fmt --check && cargo fmt --check --manifest-path ../../platform/esp-idf/Cargo.toml \
+    && cargo clippy --release -p companion-platform-esp-idf -- -D warnings \
+    && cargo clippy --release -- -D warnings && cargo build --release)
 done
 
 echo "== ok"
