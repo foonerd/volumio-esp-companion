@@ -46,10 +46,10 @@ cd firmware/waveshare-esp32-c5-touch-lcd-28
 cargo build --release
 ```
 
-With the connection step, credentials compiled into the image:
+With the connection step and the player's address, compiled into the image. `PLAYER` is written to the settings store on the first boot that finds no `player` key there; use the player's IP address, since `.local` names do not resolve on the device:
 
 ```sh
-WIFI_SSID=yournet WIFI_PASS=yourpass cargo build --release
+WIFI_SSID=yournet WIFI_PASS=yourpass PLAYER=http://192.168.1.20:3000 cargo build --release
 ```
 
 ## Image

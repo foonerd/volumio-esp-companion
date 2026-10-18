@@ -23,8 +23,9 @@ mod board;
 use std::time::{Duration, Instant};
 
 use companion_art::ArtLoader;
-use companion_hal::{NetworkStatus, TouchSource};
-use companion_platform_esp_idf::{Http, NvsStore, WifiNet};
+use companion_hal::{ConfigStore, NetworkStatus, TouchSource};
+use companion_platform_esp_idf::{Http, NvsError, NvsStore, WifiNet};
+use companion_runtime::settings::key;
 use companion_runtime::{App, Settings, TICK};
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::peripherals::Peripherals;
@@ -36,6 +37,9 @@ use log::{info, warn};
 
 const SSID: Option<&str> = option_env!("WIFI_SSID");
 const PASS: Option<&str> = option_env!("WIFI_PASS");
+/// The player's origin, seeded into the settings store on first boot when
+/// the store has none; `.local` names do not resolve on the device.
+const PLAYER: Option<&str> = option_env!("PLAYER");
 
 /// The NVS namespace the settings live in.
 const SETTINGS_NAMESPACE: &str = "companion";
@@ -79,7 +83,21 @@ fn main() -> anyhow::Result<()> {
         info!("wifi: no WIFI_SSID/WIFI_PASS at build time, connect step skipped");
     }
 
-    let store = NvsStore::open(nvs, SETTINGS_NAMESPACE)?;
+    let mut store = NvsStore::open(nvs, SETTINGS_NAMESPACE)?;
+    if let Some(player) = PLAYER {
+        let seed = |s: &mut NvsStore| -> Result<bool, NvsError> {
+            if s.get(key::PLAYER)?.is_none() {
+                s.set(key::PLAYER, player)?;
+                return Ok(true);
+            }
+            Ok(false)
+        };
+        match seed(&mut store) {
+            Ok(true) => info!("settings: player seeded from the build: {player}"),
+            Ok(false) => {}
+            Err(e) => warn!("settings: could not seed player: {e:?}"),
+        }
+    }
     let settings = Settings::load(&store);
     info!(
         "settings: player {}, rotation {}, theme {}, strip {}",
