@@ -68,20 +68,28 @@ fn main() -> anyhow::Result<()> {
     let sys_loop = EspSystemEventLoop::take()?;
     let nvs = EspDefaultNvsPartition::take()?;
 
-    let mut net = WifiNet::start(modem, sys_loop, nvs.clone())?;
-    info!("wifi: started");
-
-    set_dual_band();
-    scan(net.wifi_mut());
-
-    if let (Some(ssid), Some(pass)) = (SSID, PASS) {
-        match net.connect(ssid, pass) {
-            Ok(()) => report_link(&mut net, ssid),
-            Err(e) => warn!("wifi: connect to '{ssid}' failed: {e:?}"),
+    let mut net = match WifiNet::start(modem, sys_loop, nvs.clone()) {
+        Ok(mut net) => {
+            info!("wifi: started");
+            set_dual_band();
+            scan(net.wifi_mut());
+            if let (Some(ssid), Some(pass)) = (SSID, PASS) {
+                match net.connect(ssid, pass) {
+                    Ok(()) => report_link(&mut net, ssid),
+                    Err(e) => warn!("wifi: connect to '{ssid}' failed: {e:?}"),
+                }
+            } else {
+                info!("wifi: no WIFI_SSID/WIFI_PASS at build time, connect step skipped");
+            }
+            Net::Wifi(net)
         }
-    } else {
-        info!("wifi: no WIFI_SSID/WIFI_PASS at build time, connect step skipped");
-    }
+        Err(e) => {
+            // The panel is still worth lighting; the status page says offline.
+            warn!("wifi: start failed: {e:?}; running without a network");
+            report_memory();
+            Net::Offline
+        }
+    };
 
     let mut store = NvsStore::open(nvs, SETTINGS_NAMESPACE)?;
     if let Some(player) = PLAYER {
@@ -210,10 +218,34 @@ fn report_chip() {
 
 fn report_memory() {
     // SAFETY: plain getters with no preconditions.
-    let psram = unsafe { sys::esp_psram_get_size() };
-    let internal = unsafe { sys::heap_caps_get_total_size(sys::MALLOC_CAP_INTERNAL) };
-    let spiram = unsafe { sys::heap_caps_get_total_size(sys::MALLOC_CAP_SPIRAM) };
-    info!("psram: detected {psram} B, heap internal {internal} B, heap spiram {spiram} B");
+    let (psram, internal, free, largest, spiram) = unsafe {
+        (
+            sys::esp_psram_get_size(),
+            sys::heap_caps_get_total_size(sys::MALLOC_CAP_INTERNAL),
+            sys::heap_caps_get_free_size(sys::MALLOC_CAP_INTERNAL),
+            sys::heap_caps_get_largest_free_block(sys::MALLOC_CAP_INTERNAL),
+            sys::heap_caps_get_free_size(sys::MALLOC_CAP_SPIRAM),
+        )
+    };
+    info!(
+        "memory: psram {psram} B; internal heap {internal} B total, {free} B free, largest block {largest} B; spiram free {spiram} B"
+    );
+}
+
+/// The network the application sees: Wi-Fi, or nothing when the driver
+/// would not start.
+enum Net<'d> {
+    Wifi(WifiNet<'d>),
+    Offline,
+}
+
+impl NetworkStatus for Net<'_> {
+    fn host_info(&mut self) -> companion_hal::HostInfo {
+        match self {
+            Net::Wifi(w) => w.host_info(),
+            Net::Offline => companion_hal::HostInfo::default(),
+        }
+    }
 }
 
 fn set_dual_band() {
