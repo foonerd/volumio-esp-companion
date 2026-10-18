@@ -2,16 +2,16 @@
 //! rendered to a PNG, talking to a real player.
 //!
 //! The device parts are the host's: `ureq` for HTTP, the host's interfaces
-//! for the status page, the command line for the settings store, a thread
-//! for album art, SDL2 for the panel and the finger. The application is
-//! the same `companion-runtime` the firmware runs.
+//! for the status page, the command line for the settings store,
+//! `companion-art`'s thread for album art, SDL2 for the panel and the
+//! finger. The application is the same `companion-runtime` the firmware
+//! runs.
 //!
 //! ```text
 //! companion-sim --player http://volumio.local:3000 --rotation 90 --theme night
 //! companion-sim --snapshot face.png --after 3
 //! ```
 
-mod art;
 mod host;
 mod http;
 mod net;
@@ -19,6 +19,7 @@ mod net;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use companion_art::ArtLoader;
 use companion_hal::{Capabilities, Resolution, WifiBands};
 use companion_runtime::settings::key;
 use companion_runtime::{App, Settings, TICK};
@@ -26,7 +27,6 @@ use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::Size;
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay};
 
-use crate::art::ArtLoader;
 use crate::host::ArgStore;
 use crate::http::Http;
 use crate::net::HostNet;
@@ -130,7 +130,7 @@ fn main() {
     let mut app = App::new(&settings, CAPS, Duration::ZERO);
     let frame = app.layout().frame.size;
     let mut display = SimulatorDisplay::<Rgb565>::new(Size::new(frame.width, frame.height));
-    let loader = match ArtLoader::spawn() {
+    let loader = match ArtLoader::spawn(Http::new()) {
         Ok(l) => l,
         Err(e) => {
             eprintln!("starting the art thread: {e}");

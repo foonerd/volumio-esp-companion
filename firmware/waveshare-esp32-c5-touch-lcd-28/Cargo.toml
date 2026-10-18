@@ -16,6 +16,7 @@ harness = false
 
 [dependencies]
 ch32v003-expander = { path = "../../drivers/ch32v003-expander" }
+companion-art = { path = "../../art" }
 companion-hal = { path = "../../hal" }
 companion-platform-esp-idf = { path = "../../platform/esp-idf" }
 companion-runtime = { path = "../../runtime" }

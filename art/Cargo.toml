@@ -1,0 +1,19 @@
+[package]
+name = "companion-art"
+description = "Volumio ESP Companion: album art fetched and decoded on a thread, for any device with std and the memory for it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+companion-core = { path = "../core" }
+companion-hal = { path = "../hal" }
+companion-runtime = { path = "../runtime" }
+embedded-graphics = "0.8"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+log = "0.4"

@@ -12,10 +12,10 @@ Boots on std Rust over ESP-IDF, brings the board up and runs the application on 
 4. A connection, only if `WIFI_SSID` and `WIFI_PASS` were set at build time: channel, band, and the hostname and addresses as the status page reads them through `NetworkStatus`
 5. The settings, read from the NVS namespace `companion` through `NvsStore` (the runtime's keys; defaults when the namespace is empty)
 6. The board (`src/board.rs`), in the vendor BSP's order: the CH32V003 expander up with its outputs high; the panel reset pulsed through it (200 ms low, 200 ms settled); the ST7789 initialised through mipidsi over SPI2 at 40 MHz, RGB565 inverted, rotated as the settings say; the CST3530 reset through the expander (10 ms each side); the touch interrupt on GPIO5
-7. The application: `companion-runtime`'s `App` draws its first frame, then the backlight comes on through the expander's PWM, so nothing shows before the first frame. From here the loop steps the application every 40 ms: the status page with the hostname and address until the player answers `/status` and `getState`, then the face; the touch controller is read while its interrupt is low and the gestures go to the pages
+7. The application: `companion-runtime`'s `App` draws its first frame, then the backlight comes on through the expander's PWM, so nothing shows before the first frame. From here the loop steps the application every 40 ms: the status page with the hostname and address until the player answers `/status` and `getState`, then the face; the touch controller is read while its interrupt is low and the gestures go to the pages; album art is fetched and decoded (JPEG, PNG) on `companion-art`'s thread into PSRAM and drawn when it arrives
 8. A heartbeat every 30 s with the free heap, its low-water mark and whether the player is up
 
-Album art is not fetched yet: the face draws without it. Audio is not touched.
+Audio is not touched.
 
 ### Pins and parts, as the board module names them
 
@@ -73,7 +73,7 @@ Then read the log at 115200 on the same port.
 ## Known gaps
 
 - Not yet seen on a board. The bring-up order, the panel's inversion and colour order, the touch controller's protocol and the expander's bit sense are the vendor BSP's, read from its source; the first bench run confirms or corrects them, and the panel clock (40 MHz, half the BSP's) goes up once the frames are clean.
-- Album art: the runtime asks for covers; this firmware does not fetch or decode them yet. The 8 MB PSRAM and a 3 MB factory partition (the app is 1.6 MB) leave room for a decoder.
+- The art thread's stack is `companion-art::DEVICE_THREAD_STACK` (48 KB), a figure measured on the host in release; the device's high-water mark is the next measurement, and the figure moves with it. A cover is decoded at its own size before scaling, so a large JPEG costs a few megabytes of PSRAM for a moment (`SPIRAM_USE_MALLOC` is on). SVG station logos are not decoded.
 - The touch controller is polled while its interrupt line is low, from the 40 ms loop, rather than woken by the edge. Fine for a finger; the edge-driven version comes with the first bench measurements.
 - `esp_chip_info()` is not in esp-idf-sys 0.38.1's generated bindings. It is declared by hand in `src/main.rs`, with the struct layout checked against ESP-IDF v5.5.6 `esp_chip_info.h`.
 - The image name embedded by ESP-IDF reads `libespidf` (ESP-IDF's placeholder project name). Cosmetic.

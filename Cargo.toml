@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "art",
     "core",
     "drivers/ch32v003-expander",
     "drivers/cst3530",

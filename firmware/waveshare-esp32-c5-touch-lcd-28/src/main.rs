@@ -14,14 +14,15 @@
 //!    the backlight ([`board`]).
 //! 8. The application: `companion-runtime`'s `App` stepped on this loop
 //!    with the panel as its `DrawTarget`, the touch controller as its
-//!    finger, the platform's HTTP and network status. The status page
-//!    until the player answers, then the face. Album art is not fetched
-//!    yet; the face draws without it.
+//!    finger, the platform's HTTP and network status, and album art
+//!    fetched and decoded on `companion-art`'s thread into PSRAM. The
+//!    status page until the player answers, then the face.
 
 mod board;
 
 use std::time::{Duration, Instant};
 
+use companion_art::ArtLoader;
 use companion_hal::{NetworkStatus, TouchSource};
 use companion_platform_esp_idf::{Http, NvsStore, WifiNet};
 use companion_runtime::{App, Settings, TICK};
@@ -92,6 +93,7 @@ fn main() -> anyhow::Result<()> {
     let start = Instant::now();
     let mut app = App::new(&settings, board::CAPABILITIES, Duration::ZERO);
     let mut http = Http::new();
+    let loader = ArtLoader::spawn_with_stack(Http::new(), companion_art::DEVICE_THREAD_STACK)?;
 
     // The first frame before the light, so the panel never shows garbage.
     app.step(start.elapsed(), &mut http, &mut net, &mut board.panel)
@@ -112,6 +114,12 @@ fn main() -> anyhow::Result<()> {
         }
         if let Err(e) = app.step(now, &mut http, &mut net, &mut board.panel) {
             warn!("frame: {e:?}");
+        }
+        if let Some(req) = app.art_request(now) {
+            loader.request(req);
+        }
+        if let Some(art) = loader.poll() {
+            app.art_arrived(art, now);
         }
         if last_beat.elapsed() >= HEARTBEAT {
             last_beat = Instant::now();
