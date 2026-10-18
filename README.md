@@ -4,17 +4,21 @@ Now playing, transport, volume and album art on an ESP32 touch panel, talking to
 
 It grows out of [rpi-waveshare28](https://github.com/foonerd/rpi-waveshare28), the Raspberry Pi runtime for the Waveshare 2.8" SPI LCD. Peter of [PIXIS](https://github.com/PIXISREPO/VOLUMIO-4-TOUCH), who tested that runtime on the PIXIS CB-1, asked for the same on the Waveshare ESP32-C5-Touch-LCD-2.8 and sent the first board to start tinkering with ([the Pi thread](https://community.volumio.com/t/re-re-pi-3a-volumio-waveshare-2-8-spi-lcd-display-is-working-cst328-touch-still-wip-help-appreciated/77681), [the ESP32 thread](https://community.volumio.com/t/re-2-8inch-esp32-waveshare-panel/77872)). Thank you, Peter.
 
-**Where the project stands.** Pre-alpha. The toolchain is proven for the ESP32-C5: the firmware for the Waveshare ESP32-C5-Touch-LCD-2.8 builds std Rust on ESP-IDF and reports the chip, the PSRAM, a dual-band Wi-Fi scan and a connection. Nothing draws on a panel yet. The [wiki](https://github.com/foonerd/volumio-esp-companion/wiki) has the [connections](https://github.com/foonerd/volumio-esp-companion/wiki/Connections), the [boards](https://github.com/foonerd/volumio-esp-companion/wiki/Boards) and the [build](https://github.com/foonerd/volumio-esp-companion/wiki/Building).
+**Where the project stands.** Pre-alpha, and running on its first board: the Waveshare ESP32-C5-Touch-LCD-2.8 boots, takes its network and player from a microSD card, joins on 2.4 or 5 GHz, shows the player's face with its album art, and answers to touch. Not yet: sound, the settings page, a second board. The [wiki](https://github.com/foonerd/volumio-esp-companion/wiki) has the [connections](https://github.com/foonerd/volumio-esp-companion/wiki/Connections), the [boards](https://github.com/foonerd/volumio-esp-companion/wiki/Boards), the [build](https://github.com/foonerd/volumio-esp-companion/wiki/Building) and the [card](https://github.com/foonerd/volumio-esp-companion/wiki/Card-setup).
 
 <p align="center"><img src="https://raw.githubusercontent.com/wiki/foonerd/volumio-esp-companion/images/connections/network.png" width="760" alt="The player and the panel on one network, no cable between them"></p>
 
-The panel is a client of the player over the LAN, as the Volumio apps are: it finds the player by mDNS, polls its state over REST, sends transport and volume, fetches the art. Nothing is installed on the player.
+The panel is a client of the player over the LAN, as the Volumio apps are: it polls the player's state over REST, sends transport and volume, fetches the art. Nothing is installed on the player. (Finding the player by mDNS is on the list; today the card names its address.)
+
+## Install
+
+Each [release](https://github.com/foonerd/volumio-esp-companion/releases) carries the flashable image, its checksums, the card template and the install steps for Windows, macOS and Linux: `esptool`, one `write-flash` command, one text file on a microSD card. No toolchain needed. To build it yourself, see [Build](#build).
 
 ## Boards
 
 | Board | SoC | PSRAM | Flash | Display | Touch | Standing |
 | --- | --- | --- | --- | --- | --- | --- |
-| Waveshare ESP32-C5-Touch-LCD-2.8 | ESP32-C5, RISC-V, 2.4 and 5 GHz | 8 MB | 32 MB | ST7789, SPI, 240x320 | CST3530 | Firmware written: bring-up, panel, touch, the application, album art. Awaiting its first run on the board. |
+| Waveshare ESP32-C5-Touch-LCD-2.8 | ESP32-C5, RISC-V, 2.4 and 5 GHz | 8 MB | 32 MB | ST7789, SPI, 240x320 | CST3530 | Running: bring-up, panel, touch, the application, album art, configuration by card. No audio yet. |
 | Waveshare ESP32-C6-Touch-LCD-2.8 | ESP32-C6, RISC-V, 2.4 GHz | none | 16 MB | ST7789, SPI, 240x320 | CST3530 | Planned. |
 | Waveshare ESP32-S3-Touch-LCD-2.8 | ESP32-S3, Xtensa | 8 MB | 16 MB | ST7789, SPI, 240x320 | CST3530 | Planned. |
 

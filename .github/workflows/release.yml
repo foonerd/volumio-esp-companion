@@ -1,0 +1,119 @@
+# Publish a firmware release on a v* tag.
+#
+# Built in CI rather than on a workstation, so the published image is
+# reproducible from the tag. The toolchain steps are ci.yml's; the full
+# check runs first, then the image, then the release with the install
+# instructions as its body. The tag must equal the firmware crate's
+# version, so a release is never named one thing and built as another.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# A manual run (workflow_dispatch) builds and uploads the artefacts for
+# inspection and stops short of publishing, so a tag is never spent
+# finding out that the workflow is broken.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FIRMWARE: firmware/waveshare-esp32-c5-touch-lcd-28
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tag matches the firmware version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' "$FIRMWARE/Cargo.toml" | head -1)
+          if [ "$GITHUB_REF_NAME" != "v$ver" ]; then
+            echo "tag $GITHUB_REF_NAME does not match the firmware version v$ver" >&2
+            exit 1
+          fi
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            cmake ninja-build ccache libudev-dev libffi-dev libssl-dev \
+            flex bison gperf python3 python3-pip python3-venv dfu-util libusb-1.0-0 shellcheck libsdl2-dev
+          pip install --break-system-packages esptool==5.6.0
+      - name: Rust toolchains
+        run: |
+          rustup toolchain install && rustup target add riscv32imac-unknown-none-elf
+          (cd "$FIRMWARE" && rustup toolchain install)
+          rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          workspaces: |
+            .
+            firmware/waveshare-esp32-c5-touch-lcd-28
+          cache-bin: false
+          save-if: false
+      - name: ESP-IDF cache
+        uses: actions/cache@v6
+        with:
+          path: firmware/waveshare-esp32-c5-touch-lcd-28/.embuild
+          key: embuild-${{ runner.os }}-${{ hashFiles('firmware/waveshare-esp32-c5-touch-lcd-28/.cargo/config.toml', 'firmware/waveshare-esp32-c5-touch-lcd-28/Cargo.lock') }}
+      - name: ldproxy
+        run: cargo +1.98.1 install --locked --version 0.3.5 ldproxy
+      - name: Check
+        run: scripts/check.sh
+      - name: Image
+        run: scripts/image.sh "$FIRMWARE"
+      - name: Gather
+        run: |
+          mkdir -p release
+          cp dist/*.bin dist/*.SHA256SUMS sdcard/volumio.txt release/
+          ls -l release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: release/*
+
+  publish:
+    needs: build
+    # Only a tag publishes. A manual run builds and uploads artefacts for
+    # inspection and stops here.
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: release
+          path: release
+      - name: Version without the v, as the image is named
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: release/*
+          fail_on_unmatched_files: true
+          body: |
+            Volumio ESP Companion ${{ github.ref_name }} for the Waveshare ESP32-C5-Touch-LCD-2.8.
+
+            **Files.** `volumio-esp-companion-waveshare-esp32-c5-touch-lcd-28-*.bin` is the whole image; flash it at address 0. The `-bootloader`, `-partition-table` and `-app` files are its three parts for anyone flashing them separately. `SHA256SUMS` covers all four. `volumio.txt` is the card template.
+
+            ## Install
+
+            1. **esptool 5** on your computer. With Python: `pip install esptool` (Windows: `py -m pip install esptool`). Without Python: the standalone `esptool` binary for Windows, macOS or Linux from [esptool's releases](https://github.com/espressif/esptool/releases).
+            2. **Plug the board in** over its USB-C port. It appears as a serial port with no driver to install: Windows `COM3` or similar (Device Manager, Ports), macOS `/dev/cu.usbmodem…`, Linux `/dev/ttyACM0` (your user needs to be in the `dialout` group, or run with `sudo`).
+            3. **Flash**, with your port in place of `PORT` and the file you downloaded:
+
+                   esptool --chip esp32c5 --port PORT write-flash 0x0 volumio-esp-companion-waveshare-esp32-c5-touch-lcd-28-${{ env.VERSION }}.bin
+
+               esptool verifies the write by itself. If it cannot connect, hold the board's BOOT button while plugging it in, then run the command again.
+            4. **The card.** Copy `volumio.txt` to the root of a FAT32 microSD card (32 GB or less works as sold), fill in your Wi-Fi name and password and the player's IP address as `http://192.168.1.50:3000`, put the card in the slot. The full steps for Windows, macOS and Linux: [Card setup](https://github.com/${{ github.repository }}/wiki/Card-setup).
+            5. **Power on.** Within about twenty seconds the screen shows its network and address, then the player's face once the player answers. `status.txt` on the card says what the device read and whether it joined.
+
+            **Updating** is the same flash command with the new file. A full flash clears the device's stored settings; the card puts them back on the next boot, so leave it in.
+
+            Build, pins, boot order and the rest: [the wiki](https://github.com/${{ github.repository }}/wiki).
