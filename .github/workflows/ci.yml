@@ -45,7 +45,9 @@ jobs:
           path: firmware/waveshare-esp32-c5-touch-lcd-28/.embuild
           key: embuild-${{ runner.os }}-${{ hashFiles('firmware/waveshare-esp32-c5-touch-lcd-28/.cargo/config.toml', 'firmware/waveshare-esp32-c5-touch-lcd-28/Cargo.lock') }}
       - name: ldproxy
-        run: cargo install --locked --version 0.3.5 ldproxy
+        # The runner has no default toolchain; name the host's so cargo does
+        # not warn about the repository's toolchain file overriding one.
+        run: cargo +1.98.1 install --locked --version 0.3.5 ldproxy
       - name: Check
         run: scripts/check.sh
       - name: Image
