@@ -6,6 +6,7 @@ members = [
     "drivers/ch32v003-expander",
     "drivers/cst3530",
     "drivers/es8311",
+    "drivers/es9018k2m",
     "hal",
     "runtime",
     "sim",

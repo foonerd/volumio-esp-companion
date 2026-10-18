@@ -44,7 +44,7 @@ if ! rustup target list --installed | grep -qx "$bare"; then
   echo "target $bare is not installed: rustup target add $bare" >&2
   exit 1
 fi
-cargo build -p companion-core -p companion-hal -p companion-runtime -p ch32v003-expander -p cst3530 -p es8311 --target "$bare"
+cargo build -p companion-core -p companion-hal -p companion-runtime -p ch32v003-expander -p cst3530 -p es8311 -p es9018k2m --target "$bare"
 
 echo "== scripts"
 for f in scripts/*.sh; do bash -n "$f"; done

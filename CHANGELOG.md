@@ -4,6 +4,8 @@ All notable changes to Volumio ESP Companion are recorded here. The format follo
 
 ## [Unreleased]
 
+- `drivers/es9018k2m`: the ESS ES9018K2M stereo DAC as Pi HATs carry it (LightSABRE, I-Sabre K2M class): detection by the status register, the bring-up sequence, volume on the plugin's 0 to 100 curve, mute. Register sequence from es9018k2m-plugin (MIT). `no_std`, four tests, bare-metal in `check.sh`. Not yet on a board.
+
 ## [0.1.0] - 2026-10-18
 
 First release: the Waveshare ESP32-C5-Touch-LCD-2.8 runs the player's face, configured by a microSD card.
