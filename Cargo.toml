@@ -13,8 +13,9 @@ members = [
 ]
 # Each firmware crate is a workspace of its own: an ESP-IDF target, its own
 # toolchain channel and its own sdkconfig. Built from its directory. The
-# ESP-IDF platform crate builds only inside one of them.
+# ESP-IDF platform and board crates build only inside one of them.
 exclude = [
+    "boards/waveshare-esp32-c5-touch-lcd-28",
     "firmware/waveshare-esp32-c5-touch-lcd-28",
     "platform/esp-idf",
 ]

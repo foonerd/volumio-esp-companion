@@ -21,8 +21,6 @@
 //!    fetched and decoded on `companion-art`'s thread into PSRAM. The
 //!    status page until the player answers, then the face.
 
-mod board;
-
 use std::time::{Duration, Instant};
 
 use companion_art::ArtLoader;

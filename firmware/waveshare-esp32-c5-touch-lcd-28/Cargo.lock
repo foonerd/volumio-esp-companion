@@ -261,6 +261,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "companion-board-waveshare-esp32-c5-touch-lcd-28"
+version = "0.1.0"
+dependencies = [
+ "ch32v003-expander",
+ "companion-hal",
+ "cst3530",
+ "embedded-hal-bus",
+ "esp-idf-svc",
+ "log",
+ "mipidsi",
+]
+
+[[package]]
 name = "companion-core"
 version = "0.1.0"
 dependencies = [
@@ -1752,17 +1765,14 @@ name = "waveshare-esp32-c5-touch-lcd-28"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "ch32v003-expander",
  "companion-art",
+ "companion-board-waveshare-esp32-c5-touch-lcd-28",
  "companion-hal",
  "companion-platform-esp-idf",
  "companion-runtime",
- "cst3530",
- "embedded-hal-bus",
  "embuild",
  "esp-idf-svc",
  "log",
- "mipidsi",
 ]
 
 [[package]]

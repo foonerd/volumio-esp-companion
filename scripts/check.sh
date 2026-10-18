@@ -77,10 +77,18 @@ for crate in firmware/*/; do
       rm -rf "${cache%/out/build/CMakeCache.txt}"
     fi
   done
-  # The platform crate is formatted and linted through the firmware that
-  # carries it; it has no build of its own.
+  # The platform and board crates are formatted and linted through the
+  # firmware that carries them; they have no build of their own.
+  # A board crate is a dependency of the firmware, so `-p` reaches it from
+  # the firmware's workspace without a workspace of its own.
+  boards=()
+  for b in boards/*/Cargo.toml; do
+    [ -f "$b" ] || continue
+    boards+=(-p "$(sed -n 's/^name *= *"\(.*\)"/\1/p' "$b")")
+  done
   (cd "$crate" && cargo fmt --check && cargo fmt --check --manifest-path ../../platform/esp-idf/Cargo.toml \
-    && cargo clippy --release -p companion-platform-esp-idf -- -D warnings \
+    && for b in ../../boards/*/Cargo.toml; do cargo fmt --check --manifest-path "$b" || exit 1; done \
+    && cargo clippy --release -p companion-platform-esp-idf "${boards[@]}" -- -D warnings \
     && cargo clippy --release -- -D warnings && cargo build --release)
 done
 

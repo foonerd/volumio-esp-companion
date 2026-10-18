@@ -1,4 +1,6 @@
-//! The board: pins, bring-up order, and the parts the application needs.
+//! The Waveshare ESP32-C5-Touch-LCD-2.8: pins, bring-up order, and the
+//! parts a firmware needs. A library so that more than one firmware can
+//! stand on the board; the companion's own and a player's alike.
 //!
 //! The facts are the schematic's and the vendor BSP's (board repository
 //! `examples/esp-idf/components/esp32_c5_touch_lcd_2_8`):
@@ -66,8 +68,9 @@ const PANEL_RST: Exio = Exio::P1;
 const AMP_EN: Exio = Exio::P3;
 
 /// The I2C bus, shared by the expander and the touch controller for the
-/// life of the firmware.
-type Bus = &'static RefCell<I2cDriver<'static>>;
+/// life of the firmware, and handed out so a firmware can put the codec
+/// or a DAC on it too (`RefCellDevice::new(board.bus)`).
+pub type Bus = &'static RefCell<I2cDriver<'static>>;
 
 /// The SPI bus, shared by the panel and the card for the life of the
 /// firmware.
@@ -90,6 +93,8 @@ pub struct Board {
     pub touch_int: PinDriver<'static, Input>,
     /// The expander, for the backlight and the amplifier.
     pub expander: Expander<RefCellDevice<'static, I2cDriver<'static>>>,
+    /// The I2C bus the expander and touch controller are on, for more.
+    pub bus: Bus,
 }
 
 /// The peripherals a bring-up consumes, each moved in by name so the
@@ -182,6 +187,7 @@ pub fn bring_up(pins: Pins, spi: Spi, rotation: u16) -> Result<Board, BringUpErr
         touch,
         touch_int,
         expander,
+        bus,
     })
 }
 
