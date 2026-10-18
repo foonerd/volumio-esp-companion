@@ -1,0 +1,58 @@
+# The check on every push and pull request, the firmware built for its
+# device, and the flashable image as a build artefact.
+#
+# The toolchain steps are esp-rs/esp-idf-template's ci_cargo.yml (the std
+# ESP-IDF recipe Espressif keeps green for the esp32c5), with the versions
+# this repository pins: rust-toolchain.toml in each crate names its channel
+# and components; ldproxy is built at the version the firmware was first
+# built with. ESP-IDF and the chip's GCC are fetched by embuild into the
+# firmware crate's .embuild/ and cached between runs.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            cmake ninja-build ccache libudev-dev libffi-dev libssl-dev \
+            flex bison gperf python3 python3-pip python3-venv dfu-util libusb-1.0-0 shellcheck
+          pip install --break-system-packages esptool==5.6.0
+      - name: Rust toolchains
+        run: |
+          rustup toolchain install && rustup target add riscv32imac-unknown-none-elf
+          (cd firmware/waveshare-esp32-c5-touch-lcd-28 && rustup toolchain install)
+          rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          workspaces: |
+            .
+            firmware/waveshare-esp32-c5-touch-lcd-28
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: ESP-IDF cache
+        uses: actions/cache@v6
+        with:
+          path: firmware/waveshare-esp32-c5-touch-lcd-28/.embuild
+          key: embuild-${{ runner.os }}-${{ hashFiles('firmware/waveshare-esp32-c5-touch-lcd-28/.cargo/config.toml', 'firmware/waveshare-esp32-c5-touch-lcd-28/Cargo.lock') }}
+      - name: ldproxy
+        run: cargo install --locked --version 0.3.5 ldproxy
+      - name: Check
+        run: scripts/check.sh
+      - name: Image
+        run: scripts/image.sh firmware/waveshare-esp32-c5-touch-lcd-28
+      - uses: actions/upload-artifact@v7
+        with:
+          name: firmware
+          path: |
+            dist/*.bin
+            dist/*.SHA256SUMS

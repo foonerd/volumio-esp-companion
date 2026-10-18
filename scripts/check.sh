@@ -44,7 +44,7 @@ fi
 for crate in firmware/*/; do
   [ -f "$crate/Cargo.toml" ] || continue
   echo "-- $crate"
-  (cd "$crate" && cargo fmt --check && cargo build --release)
+  (cd "$crate" && cargo fmt --check && cargo clippy --release -- -D warnings && cargo build --release)
 done
 
 echo "== ok"

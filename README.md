@@ -83,7 +83,15 @@ scripts/check.sh                                            # format, clippy, te
 scripts/image.sh firmware/waveshare-esp32-c5-touch-lcd-28   # the merged image and its parts into dist/
 ```
 
-`check.sh` refuses to pass on a machine without the ESP toolchain rather than report a pass that never built the product. Each firmware crate's README has its flash command.
+`check.sh` refuses to pass on a machine without the ESP toolchain rather than report a pass that never built the product. Without the toolchain on the machine, the builder image of `scripts/builder/Dockerfile` has everything; the first build fetches ESP-IDF into the firmware crate's `.embuild/`, which the mounted checkout keeps:
+
+```sh
+docker build -t companion-builder -f scripts/builder/Dockerfile .
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work companion-builder scripts/check.sh
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work companion-builder scripts/image.sh firmware/waveshare-esp32-c5-touch-lcd-28
+```
+
+Each firmware crate's README has its flash command.
 
 ## License
 
