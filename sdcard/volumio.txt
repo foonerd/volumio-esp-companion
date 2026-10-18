@@ -14,6 +14,11 @@
 wifi_ssid = Your Network
 wifi_password = your password
 
+# The device's name on your network: letters, digits and hyphens, up to
+# 30, no spaces. Your router's device list shows it. Leave empty for
+# "espressif".
+name = volumio-panel
+
 # The Volumio player, as http://ADDRESS:3000. Use the player's IP
 # address: names ending in .local are not resolved by this device.
 player = http://192.168.1.50:3000

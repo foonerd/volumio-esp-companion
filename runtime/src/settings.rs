@@ -66,8 +66,28 @@ pub mod key {
     pub const WIFI_SSID: &str = "wifi_ssid";
     /// The network's password; absent or empty is an open network.
     pub const WIFI_PASSWORD: &str = "wifi_password";
-    /// The credential keys.
-    pub const CREDENTIALS: &[&str] = &[WIFI_SSID, WIFI_PASSWORD];
+    /// The device's name on the network (its DHCP and mDNS hostname);
+    /// absent is the platform's default. See [`super::hostname`].
+    pub const NAME: &str = "name";
+    /// The device's own keys, read by its firmware.
+    pub const DEVICE: &[&str] = &[WIFI_SSID, WIFI_PASSWORD, NAME];
+}
+
+/// The longest hostname a device accepts (ESP-IDF's DHCP client: 30).
+pub const MAX_HOSTNAME_LEN: usize = 30;
+
+/// `raw` as a hostname, if it is one: one DNS label of 1 to
+/// [`MAX_HOSTNAME_LEN`] ASCII letters, digits and hyphens, not starting or
+/// ending with a hyphen, surrounding whitespace ignored. Anything else is
+/// `None` and the device keeps its default name.
+pub fn hostname(raw: &str) -> Option<&str> {
+    let s = raw.trim();
+    let ok = !s.is_empty()
+        && s.len() <= MAX_HOSTNAME_LEN
+        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        && !s.starts_with('-')
+        && !s.ends_with('-');
+    ok.then_some(s)
 }
 
 /// What the application needs to know before it starts.
@@ -293,12 +313,24 @@ mod tests {
 
     #[test]
     fn every_key_fits_an_nvs_name() {
-        for k in key::ALL.iter().chain(key::CREDENTIALS) {
+        for k in key::ALL.iter().chain(key::DEVICE) {
             assert!(k.len() <= key::MAX_KEY_LEN, "{k} is {} bytes", k.len());
             assert!(k.is_ascii(), "{k}");
         }
         assert_eq!(key::ALL.len(), 11);
-        assert_eq!(key::CREDENTIALS.len(), 2);
+        assert_eq!(key::DEVICE.len(), 3);
+    }
+
+    #[test]
+    fn a_hostname_is_one_dns_label() {
+        assert_eq!(hostname(" kitchen-panel "), Some("kitchen-panel"));
+        assert_eq!(hostname("Volumio28"), Some("Volumio28"));
+        for bad in ["", "  ", "-x", "x-", "a b", "a.b", "ünder", "a_b"] {
+            assert_eq!(hostname(bad), None, "{bad:?}");
+        }
+        let long = "a".repeat(MAX_HOSTNAME_LEN);
+        assert_eq!(hostname(&long).map(str::len), Some(MAX_HOSTNAME_LEN));
+        assert_eq!(hostname(&(long + "a")), None);
     }
 
     #[test]

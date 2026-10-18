@@ -10,7 +10,7 @@
 //! The format is the smallest thing a text editor on any OS produces:
 //! UTF-8, one `key = value` per line, blank lines and lines starting with
 //! `#` or `;` ignored, CRLF or LF, a leading byte-order mark tolerated.
-//! Keys are the store's ([`key`] plus the credentials), case-insensitive.
+//! Keys are the store's ([`key`] plus the device's own), case-insensitive.
 //! The value is everything after the first `=`, trimmed; a value wrapped
 //! in matching double quotes keeps its inner spaces. There are no inline
 //! comments, because `#` is a legal character in a password. An empty
@@ -99,7 +99,7 @@ pub fn apply<S: ConfigStore>(parsed: &Parsed, store: &mut S) -> Result<(), S::Er
 }
 
 fn is_known(k: &str) -> bool {
-    key::ALL.contains(&k) || key::CREDENTIALS.contains(&k)
+    key::ALL.contains(&k) || key::DEVICE.contains(&k)
 }
 
 fn unquote(v: &str) -> &str {
@@ -147,6 +147,7 @@ mod tests {
             [
                 key::WIFI_SSID,
                 key::WIFI_PASSWORD,
+                key::NAME,
                 key::PLAYER,
                 key::ROTATION,
                 key::THEME

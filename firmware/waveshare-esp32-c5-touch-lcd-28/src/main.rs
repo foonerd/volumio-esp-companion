@@ -106,8 +106,25 @@ fn main() -> anyhow::Result<()> {
         .ok()
         .flatten()
         .unwrap_or_default();
+    let name = store.get(key::NAME).ok().flatten();
+    let hostname = match name.as_deref() {
+        Some(raw) => match companion_runtime::settings::hostname(raw) {
+            Some(h) => Some(h),
+            None => {
+                let line = format!(
+                    "{}: {raw:?} is not a hostname (letters, digits, hyphens, up to {}); keeping the default",
+                    key::NAME,
+                    companion_runtime::settings::MAX_HOSTNAME_LEN
+                );
+                warn!("{line}");
+                status.line(line);
+                None
+            }
+        },
+        None => None,
+    };
 
-    let mut net = match WifiNet::start(modem, sys_loop, nvs) {
+    let mut net = match WifiNet::start(modem, sys_loop, nvs, hostname) {
         Ok(mut net) => {
             info!("wifi: started");
             set_dual_band();

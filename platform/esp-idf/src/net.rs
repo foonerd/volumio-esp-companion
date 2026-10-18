@@ -8,9 +8,16 @@
 use companion_hal::{Address, HostInfo, Hotspot, Link, NetworkStatus};
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::modem::Modem;
+use esp_idf_svc::ipv4::{
+    ClientConfiguration as IpClientConfiguration, Configuration as IpConfiguration,
+    DHCPClientSettings,
+};
+use esp_idf_svc::netif::{EspNetif, NetifConfiguration, NetifStack};
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
-use esp_idf_svc::sys::EspError;
-use esp_idf_svc::wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi};
+use esp_idf_svc::sys::{EspError, ESP_ERR_INVALID_ARG};
+use esp_idf_svc::wifi::{
+    AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi, WifiDriver,
+};
 
 /// The Wi-Fi, started, as the application's view of the network.
 pub struct WifiNet<'d> {
@@ -19,14 +26,36 @@ pub struct WifiNet<'d> {
 
 impl<'d> WifiNet<'d> {
     /// Take the modem, start the driver in station mode with no network
-    /// yet. Scanning works from here; `connect` joins one.
+    /// yet. Scanning works from here; `connect` joins one. `hostname` is
+    /// what the station tells DHCP, so the router's device list shows it;
+    /// `None` keeps ESP-IDF's default (`espressif`). Nothing answers for
+    /// it as `.local` until an mDNS responder is built in. Longer than the
+    /// netif accepts (30) is `ESP_ERR_INVALID_ARG`.
     pub fn start(
         modem: Modem<'d>,
         sys_loop: EspSystemEventLoop,
         nvs: EspDefaultNvsPartition,
+        hostname: Option<&str>,
     ) -> Result<Self, EspError> {
-        let mut wifi =
-            BlockingWifi::wrap(EspWifi::new(modem, sys_loop.clone(), Some(nvs))?, sys_loop)?;
+        let driver = WifiDriver::new(modem, sys_loop.clone(), Some(nvs))?;
+        let sta = match hostname {
+            Some(name) => {
+                let name = name
+                    .try_into()
+                    .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
+                EspNetif::new_with_conf(&NetifConfiguration {
+                    ip_configuration: Some(IpConfiguration::Client(IpClientConfiguration::DHCP(
+                        DHCPClientSettings {
+                            hostname: Some(name),
+                        },
+                    ))),
+                    ..NetifConfiguration::wifi_default_client()
+                })?
+            }
+            None => EspNetif::new(NetifStack::Sta)?,
+        };
+        let wifi = EspWifi::wrap_all(driver, sta, EspNetif::new(NetifStack::Ap)?)?;
+        let mut wifi = BlockingWifi::wrap(wifi, sys_loop)?;
         wifi.set_configuration(&Configuration::Client(ClientConfiguration::default()))?;
         wifi.start()?;
         Ok(Self { wifi })
@@ -46,9 +75,7 @@ impl<'d> WifiNet<'d> {
         };
         // heapless strings: a name too long for the driver is not a name.
         if conf.ssid.push_str(ssid).is_err() || conf.password.push_str(password).is_err() {
-            return Err(EspError::from_infallible::<
-                { esp_idf_svc::sys::ESP_ERR_INVALID_ARG },
-            >());
+            return Err(EspError::from_infallible::<{ ESP_ERR_INVALID_ARG }>());
         }
         self.wifi.set_configuration(&Configuration::Client(conf))?;
         self.wifi.connect()?;
@@ -70,9 +97,11 @@ impl<'d> WifiNet<'d> {
 impl NetworkStatus for WifiNet<'_> {
     fn host_info(&mut self) -> HostInfo {
         let sta = self.wifi.wifi().sta_netif();
+        // The bare name: there is no mDNS responder in this build, so a
+        // `.local` suffix would name something that does not answer.
         let hostname = sta
             .get_hostname()
-            .map(|h| format!("{}.local", h.as_str()))
+            .map(|h| h.as_str().to_string())
             .unwrap_or_default();
         let mut addrs = Vec::new();
         if self.wifi.is_up().unwrap_or(false) {
