@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 
 use companion_art::ArtLoader;
 use companion_hal::{ConfigStore, NetworkStatus, TouchSource};
-use companion_platform_esp_idf::{ApHint, Card, Http, NvsStore, WifiNet};
+use companion_platform_esp_idf::{Band, Card, Http, NvsStore, WifiNet};
 use companion_runtime::settings::key;
 use companion_runtime::{card, App, Settings, TICK};
 use esp_idf_svc::eventloop::EspSystemEventLoop;
@@ -125,14 +125,14 @@ fn main() -> anyhow::Result<()> {
     let mut net = match WifiNet::start(modem, sys_loop, nvs, hostname) {
         Ok(mut net) => {
             info!("wifi: started");
-            set_dual_band();
+            net.set_band(Band::Both);
             // The scan is a bring-up diagnostic; with a network to join it
             // only costs the boot twelve seconds.
             if ssid.is_none() {
                 scan(net.wifi_mut());
             }
             match ssid.as_deref() {
-                Some(ssid) => match join(&mut net, &mut store, ssid, &password) {
+                Some(ssid) => match net.join(&mut store, ssid, &password) {
                     Ok(()) => status.line(report_link(&mut net, ssid)),
                     Err(e) => {
                         let line = format!("wifi: could not join '{ssid}': {e}");
@@ -253,95 +253,6 @@ fn art_stack_low_water() -> Option<u32> {
     }
     // SAFETY: the handle is a live task's; ESP-IDF's StackType_t is a byte.
     Some(unsafe { sys::uxTaskGetStackHighWaterMark(task) })
-}
-
-/// Join `ssid`: straight to the access point the store remembers for it,
-/// else the full search; then remember where it landed.
-fn join(
-    net: &mut WifiNet,
-    store: &mut NvsStore,
-    ssid: &str,
-    password: &str,
-) -> Result<(), sys::EspError> {
-    let remembered = read_hint(store, ssid);
-    let hinted = remembered.and_then(|h| {
-        // One band to search, the one the AP was on.
-        set_band(if h.channel > 14 {
-            sys::wifi_band_mode_t_WIFI_BAND_MODE_5G_ONLY
-        } else {
-            sys::wifi_band_mode_t_WIFI_BAND_MODE_2G_ONLY
-        });
-        let started = Instant::now();
-        let outcome = net.connect(ssid, password, Some(h));
-        set_band(sys::wifi_band_mode_t_WIFI_BAND_MODE_AUTO);
-        match outcome {
-            Ok(()) => {
-                info!(
-                    "wifi: joined by hint {h:?} in {} ms",
-                    started.elapsed().as_millis()
-                );
-                Some(())
-            }
-            Err(e) => {
-                info!("wifi: hint {h:?} did not answer ({e}); searching");
-                None
-            }
-        }
-    });
-    if hinted.is_none() {
-        let started = Instant::now();
-        net.connect(ssid, password, None)?;
-        info!(
-            "wifi: joined by search in {} ms",
-            started.elapsed().as_millis()
-        );
-    }
-    if let Some(now) = net.joined_ap() {
-        if remembered != Some(now) {
-            write_hint(store, ssid, now);
-        }
-    }
-    Ok(())
-}
-
-/// Store keys for the remembered access point; not settings, not on the
-/// card, so not among the runtime's keys.
-const HINT_SSID: &str = "hint_ssid";
-const HINT_CHANNEL: &str = "hint_channel";
-const HINT_BSSID: &str = "hint_bssid";
-
-fn read_hint(store: &NvsStore, ssid: &str) -> Option<ApHint> {
-    let get = |k: &str| store.get(k).ok().flatten();
-    if get(HINT_SSID)?.as_str() != ssid {
-        return None;
-    }
-    let channel = get(HINT_CHANNEL)?.parse().ok()?;
-    let bssid_text = get(HINT_BSSID)?;
-    let mut bssid = [0u8; 6];
-    let mut parts = bssid_text.split(':');
-    for b in &mut bssid {
-        *b = u8::from_str_radix(parts.next()?, 16).ok()?;
-    }
-    if parts.next().is_some() {
-        return None;
-    }
-    Some(ApHint { channel, bssid })
-}
-
-fn write_hint(store: &mut NvsStore, ssid: &str, hint: ApHint) {
-    let b = hint.bssid;
-    let bssid = format!(
-        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-        b[0], b[1], b[2], b[3], b[4], b[5]
-    );
-    let result = store
-        .set(HINT_SSID, ssid)
-        .and_then(|()| store.set(HINT_CHANNEL, &hint.channel.to_string()))
-        .and_then(|()| store.set(HINT_BSSID, &bssid));
-    match result {
-        Ok(()) => info!("wifi: remembered ch {} {bssid} for '{ssid}'", hint.channel),
-        Err(e) => warn!("wifi: could not remember the access point: {e}"),
-    }
 }
 
 /// What the status page would show, through the same trait it reads.
@@ -513,24 +424,6 @@ impl NetworkStatus for Net<'_> {
             Net::Wifi(w) => w.host_info(),
             Net::Offline => companion_hal::HostInfo::default(),
         }
-    }
-}
-
-fn set_dual_band() {
-    set_band(sys::wifi_band_mode_t_WIFI_BAND_MODE_AUTO);
-    let mut mode: sys::wifi_band_mode_t = 0;
-    // SAFETY: writes into the caller-owned value.
-    let rc = unsafe { sys::esp_wifi_get_band_mode(&mut mode) };
-    info!("wifi: band mode readback rc={rc} mode={mode} (3 = AUTO)");
-}
-
-fn set_band(mode: sys::wifi_band_mode_t) {
-    // SAFETY: called after esp_wifi_start; the argument is a valid enum value.
-    let rc = unsafe { sys::esp_wifi_set_band_mode(mode) };
-    if rc == sys::ESP_OK {
-        info!("wifi: band mode {mode} (1 = 2.4 GHz, 2 = 5 GHz, 3 = AUTO)");
-    } else {
-        warn!("wifi: esp_wifi_set_band_mode({mode}) returned {rc}");
     }
 }
 
