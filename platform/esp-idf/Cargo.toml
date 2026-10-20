@@ -20,7 +20,3 @@ unused_qualifications = "warn"
 companion-hal = { path = "../../hal" }
 esp-idf-svc = { version = "0.53", default-features = false, features = ["std", "alloc"] }
 log = "0.4"
-# The WPA2 key derivation, done here at the caller's priority rather than
-# in the Wi-Fi driver's task (see `net::psk`).
-pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
-sha1 = { version = "0.10", default-features = false }

@@ -75,25 +75,10 @@ const SEARCH_TIMEOUT: Duration = Duration::from_secs(15);
 const HINTED_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Store keys for the remembered access point: where the station last
-/// found its network, so the next boot goes straight there, and the key
-/// derived for it, so no boot derives it again.
+/// found its network, so the next boot goes straight there.
 const HINT_SSID: &str = "hint_ssid";
 const HINT_CHANNEL: &str = "hint_channel";
 const HINT_BSSID: &str = "hint_bssid";
-const HINT_PSK: &str = "hint_psk";
-
-/// WPA2's pairwise master key for `ssid` and `password`, as the driver
-/// takes it: 64 hex characters in the password's place, which it uses
-/// as the key instead of deriving one. The derivation (PBKDF2-SHA1,
-/// 4096 rounds) is a few hundred milliseconds of arithmetic; the driver
-/// does it in its own task at a priority above everything else in the
-/// firmware, and a player's audio ran dry while it did. Done here, it
-/// runs at the caller's priority.
-pub fn psk(ssid: &str, password: &str) -> String {
-    let mut key = [0u8; 32];
-    pbkdf2::pbkdf2_hmac::<sha1::Sha1>(password.as_bytes(), ssid.as_bytes(), 4096, &mut key);
-    key.iter().map(|b| format!("{b:02x}")).collect()
-}
 
 impl<'d> WifiNet<'d> {
     /// Take the modem, start the driver in station mode with no network
@@ -183,9 +168,7 @@ impl<'d> WifiNet<'d> {
     /// Join `ssid` the quick way when the store remembers where it was
     /// (one band, one channel, one BSSID: about a second), else by the
     /// full search; then remember where it landed for next time. The band
-    /// is left on both afterwards. A password is handed to the driver as
-    /// the key derived from it ([`psk`]), remembered too; a key the
-    /// network refuses (the password changed) is derived again once.
+    /// is left on both afterwards.
     pub fn join<S: ConfigStore>(
         &mut self,
         store: &mut S,
@@ -193,11 +176,10 @@ impl<'d> WifiNet<'d> {
         password: &str,
     ) -> Result<(), EspError> {
         let remembered = read_hint(store, ssid);
-        let mut secret = Secret::for_network(store, ssid, password);
         let hinted = remembered.and_then(|h| {
             self.set_band(Band::of_channel(h.channel));
             let started = Instant::now();
-            let outcome = self.connect(ssid, secret.as_password(), Some(h));
+            let outcome = self.connect(ssid, password, Some(h));
             self.set_band(Band::Both);
             match outcome {
                 Ok(()) => {
@@ -215,12 +197,7 @@ impl<'d> WifiNet<'d> {
         });
         if hinted.is_none() {
             let started = Instant::now();
-            let mut outcome = self.connect(ssid, secret.as_password(), None);
-            if outcome.is_err() && secret.renew(ssid, password) {
-                log::info!("wifi: the remembered key was refused; derived again");
-                outcome = self.connect(ssid, secret.as_password(), None);
-            }
-            outcome?;
+            self.connect(ssid, password, None)?;
             log::info!(
                 "wifi: joined by search in {} ms",
                 started.elapsed().as_millis()
@@ -231,7 +208,6 @@ impl<'d> WifiNet<'d> {
                 write_hint(store, ssid, now);
             }
         }
-        secret.remember(store, ssid);
         Ok(())
     }
 
@@ -284,60 +260,6 @@ impl<'d> WifiNet<'d> {
     /// The driver, mutably.
     pub fn wifi_mut(&mut self) -> &mut BlockingWifi<EspWifi<'d>> {
         &mut self.wifi
-    }
-}
-
-/// What the driver is given in the password's place.
-enum Secret {
-    /// An open network: nothing.
-    Open,
-    /// A key from the store, not yet proven.
-    Remembered(String),
-    /// A key derived this time; to be stored once the join succeeds.
-    Derived(String),
-}
-
-impl Secret {
-    fn for_network<S: ConfigStore>(store: &S, ssid: &str, password: &str) -> Secret {
-        if password.is_empty() {
-            return Secret::Open;
-        }
-        let same_network = store.get(HINT_SSID).ok().flatten().as_deref() == Some(ssid);
-        match store.get(HINT_PSK).ok().flatten().filter(|_| same_network) {
-            Some(key) => Secret::Remembered(key),
-            None => Secret::Derived(psk(ssid, password)),
-        }
-    }
-
-    fn as_password(&self) -> &str {
-        match self {
-            Secret::Open => "",
-            Secret::Remembered(k) | Secret::Derived(k) => k,
-        }
-    }
-
-    /// Derive afresh if what was tried came from the store and differs
-    /// from what the password gives now; `true` if there is a new key.
-    fn renew(&mut self, ssid: &str, password: &str) -> bool {
-        if let Secret::Remembered(old) = self {
-            let fresh = psk(ssid, password);
-            if fresh != *old {
-                *self = Secret::Derived(fresh);
-                return true;
-            }
-        }
-        false
-    }
-
-    fn remember<S: ConfigStore>(&self, store: &mut S, ssid: &str) {
-        if let Secret::Derived(key) = self {
-            let result = store
-                .set(HINT_SSID, ssid)
-                .and_then(|()| store.set(HINT_PSK, key));
-            if let Err(e) = result {
-                log::warn!("wifi: could not remember the key: {e:?}");
-            }
-        }
     }
 }
 
