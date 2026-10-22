@@ -58,6 +58,11 @@ impl Band {
         }
     }
 
+    /// Whether a station searching `self` may join on `other`.
+    pub fn allows(self, other: Band) -> bool {
+        self == Band::Both || self == other
+    }
+
     fn mode(self) -> sys::wifi_band_mode_t {
         match self {
             Band::TwoPointFour => sys::wifi_band_mode_t_WIFI_BAND_MODE_2G_ONLY,
@@ -167,35 +172,42 @@ impl<'d> WifiNet<'d> {
 
     /// Join `ssid` the quick way when the store remembers where it was
     /// (one band, one channel, one BSSID: about a second), else by the
-    /// full search; then remember where it landed for next time. The band
-    /// is left on both afterwards.
+    /// full search; then remember where it landed for next time. Only
+    /// `band` is searched, and a hint on another band is not followed:
+    /// a network on both bands is otherwise joined on whichever the
+    /// first search found strongest and remembered from then on. The
+    /// band is left on `band` afterwards.
     pub fn join<S: ConfigStore>(
         &mut self,
         store: &mut S,
         ssid: &str,
         password: &str,
+        band: Band,
     ) -> Result<(), EspError> {
         let remembered = read_hint(store, ssid);
-        let hinted = remembered.and_then(|h| {
-            self.set_band(Band::of_channel(h.channel));
-            let started = Instant::now();
-            let outcome = self.connect(ssid, password, Some(h));
-            self.set_band(Band::Both);
-            match outcome {
-                Ok(()) => {
-                    log::info!(
-                        "wifi: joined by hint {h:?} in {} ms",
-                        started.elapsed().as_millis()
-                    );
-                    Some(())
+        let hinted = remembered
+            .filter(|h| band.allows(Band::of_channel(h.channel)))
+            .and_then(|h| {
+                self.set_band(Band::of_channel(h.channel));
+                let started = Instant::now();
+                let outcome = self.connect(ssid, password, Some(h));
+                self.set_band(band);
+                match outcome {
+                    Ok(()) => {
+                        log::info!(
+                            "wifi: joined by hint {h:?} in {} ms",
+                            started.elapsed().as_millis()
+                        );
+                        Some(())
+                    }
+                    Err(e) => {
+                        log::info!("wifi: hint {h:?} did not answer ({e}); searching");
+                        None
+                    }
                 }
-                Err(e) => {
-                    log::info!("wifi: hint {h:?} did not answer ({e}); searching");
-                    None
-                }
-            }
-        });
+            });
         if hinted.is_none() {
+            self.set_band(band);
             let started = Instant::now();
             self.connect(ssid, password, None)?;
             log::info!(

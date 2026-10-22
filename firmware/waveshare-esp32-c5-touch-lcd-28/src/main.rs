@@ -132,7 +132,7 @@ fn main() -> anyhow::Result<()> {
                 scan(net.wifi_mut());
             }
             match ssid.as_deref() {
-                Some(ssid) => match net.join(&mut store, ssid, &password) {
+                Some(ssid) => match net.join(&mut store, ssid, &password, Band::Both) {
                     Ok(()) => status.line(report_link(&mut net, ssid)),
                     Err(e) => {
                         let line = format!("wifi: could not join '{ssid}': {e}");
