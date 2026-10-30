@@ -65,6 +65,7 @@ enum Reg {
     DigitalVolumeLeft = 61,
     DigitalVolumeRight = 62,
     RateDet1 = 91,
+    RateDet4 = 94,
     ClockStatus = 95,
 }
 
@@ -83,6 +84,9 @@ const IGNORE_SCK_HALT: u8 = 0x08;
 const MASTER_MODE_DEFAULT: u8 = 0x7C;
 /// Register 42 after reset: left to left, right to right.
 const DAC_ROUTING_DEFAULT: u8 = 0x11;
+/// Register 94: set while no SCK arrives (the HiFiBerry machine driver
+/// reads this bit to tell a DAC+ Pro's oscillators).
+const SCK_MISSING: u8 = 0x40;
 
 /// How many bits of each I2S slot carry audio.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -220,6 +224,14 @@ impl<I2C: I2c> Pcm512x<I2C> {
             status: self.read(Reg::ClockStatus)?,
         })
     }
+
+    /// Whether a system clock arrives on SCK: a board with an oscillator
+    /// of its own that is running (a DAC+ Pro, an Allo Boss and their
+    /// kin), which this bring-up does not expect; a 3-wire board reads
+    /// `false`.
+    pub fn sck_present(&mut self) -> Result<bool, I2C::Error> {
+        Ok(self.read(Reg::RateDet4)? & SCK_MISSING == 0)
+    }
 }
 
 #[cfg(test)]
@@ -301,6 +313,15 @@ mod tests {
         dac.set_attenuation(0).unwrap();
         dac.set_attenuation(12).unwrap(); // -6 dB
         dac.set_attenuation(255).unwrap();
+        i2c.done();
+    }
+
+    #[test]
+    fn sck_presence_is_register_94s_bit_6_inverted() {
+        let mut i2c = Mock::new(&[r(94, 0x40), r(94, 0x00)]);
+        let mut dac = Pcm512x::new(&mut i2c);
+        assert!(!dac.sck_present().unwrap());
+        assert!(dac.sck_present().unwrap());
         i2c.done();
     }
 

@@ -18,4 +18,4 @@ The register sequence is the Linux `pcm512x` codec driver's for a clock-consumer
 
 Detection reads two registers the driver never changes — 12 (`0x7C` in its upper six bits) and 42 (`0x11`), the chip's reset values — because the PCM512x has no identity register; they hold through this driver's configuration, so a warm restart finds the chip too.
 
-`no_std`, no `unsafe`, `embedded_hal::i2c::I2c` only; five tests against embedded-hal-mock on exact transactions; built for bare-metal RISC-V in `check.sh`. First board: Waveshare's PCM5122 Audio Board (A) on the C5 panel's header, 16-bit I2S at 32 fs.
+`no_std`, no `unsafe`, `embedded_hal::i2c::I2c` only; six tests against embedded-hal-mock on exact transactions; built for bare-metal RISC-V in `check.sh`. First board: Waveshare's PCM5122 Audio Board (A) on the C5 panel's header, 16-bit I2S at 32 fs.
