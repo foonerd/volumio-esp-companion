@@ -16,5 +16,8 @@ SPI display controllers of the ST77xx and ILI9xxx families need no crate here: m
 | --- | --- | --- |
 | [`ch32v003-expander`](ch32v003-expander/) | the CH32V003 running Waveshare's IO-expander firmware: eight GPIO, a PWM output, an ADC input | Waveshare's register map and BSP sequences in the board repository; embedded-hal-mock on the host. Not yet on a board. |
 | [`cst3530`](cst3530/) | the Hynitron CST3530 touch controller | Waveshare's `esp_lcd_touch_cst3530` component; embedded-hal-mock on the host. Not yet on a board. |
+| [`es8311`](es8311/) | the Everest ES8311 codec at `0x18`, mono, its master clock made from BCLK; the DAC path | Waveshare's BSP sequence; embedded-hal-mock on the host; plays on the ESP32-C5-Touch-LCD-2.8. |
+| [`es9018k2m`](es9018k2m/) | the ESS ES9018K2M DAC at `0x48` as LightSABRE-class Pi HATs carry it, its own oscillator on the HAT | the es9018k2m-plugin's sequence; embedded-hal-mock on the host. |
+| [`pcm512x`](pcm512x/) | the TI PCM5121/PCM5122 DAC at `0x4C` or `0x4D` as IQaudIO, HiFiBerry and Waveshare Pi HATs carry it, no master clock: the PLL on BCK, the dividers auto-set | the Linux `pcm512x` driver's clock-consumer path and the data sheet (SLAS763C, Table 33); embedded-hal-mock on the host. First board: Waveshare's PCM5122 Audio Board (A). |
 
 The boards that carry both are the three Waveshare 2.8" ESP32 touch panels. Each crate's README says what it does and what remains to be seen on the bench.

@@ -7,6 +7,7 @@ members = [
     "drivers/cst3530",
     "drivers/es8311",
     "drivers/es9018k2m",
+    "drivers/pcm512x",
     "hal",
     "runtime",
     "sim",
