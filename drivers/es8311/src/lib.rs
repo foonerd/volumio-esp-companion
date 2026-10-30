@@ -374,13 +374,34 @@ impl<I2C: I2c> Es8311<I2C> {
     }
 
     /// Set the stream's sample rate and sample width, I2S (Philips)
-    /// framing. The rate must be in the clock table: 8, 11.025, 12, 16,
-    /// 22.05, 24, 32, 44.1, 48, 64 or 96 kHz; the width 16, 24 or 32.
+    /// framing, in slots as wide as the samples (32-bit slots at 8 kHz,
+    /// where the bit clock would otherwise be too slow to multiply).
+    /// The rate must be in the clock table: 8, 11.025, 12, 16, 22.05,
+    /// 24, 32, 44.1, 48, 64 or 96 kHz; the width 16, 24 or 32.
     pub fn set_format(&mut self, rate: u32, bits: u8) -> Result<(), Error<I2C::Error>> {
+        let slot_bits = if rate == 8000 { 32 } else { bits };
+        self.set_format_in_slots(rate, bits, slot_bits)
+    }
+
+    /// [`set_format`](Self::set_format) with the slot width said: the
+    /// bit clock is `2 x slot_bits x rate`, and without an MCLK pin the
+    /// codec multiplies it to `256 x rate` — by 8 for 16-bit slots, by 4
+    /// for 32-bit slots. Other slot widths are refused.
+    pub fn set_format_in_slots(
+        &mut self,
+        rate: u32,
+        bits: u8,
+        slot_bits: u8,
+    ) -> Result<(), Error<I2C::Error>> {
         let coeff = *COEFFS
             .iter()
             .find(|c| c.rate == rate)
             .ok_or(Error::Unsupported)?;
+        let multi: u8 = match slot_bits {
+            16 => 3,
+            32 => 2,
+            _ => return Err(Error::Unsupported),
+        };
         let width = |v: u8| match bits {
             24 => v & !0x1C,
             32 => v | 0x10,
@@ -393,11 +414,9 @@ impl<I2C: I2c> Es8311<I2C> {
         for reg in [Reg::SdpIn09, Reg::SdpOut0A] {
             self.update(reg, |v| v & 0xFC)?;
         }
-        // Pre-divider and multiplier. Without an MCLK pin the
-        // multiplier is x8, so that MCLK = BCLK x 8 = LRCK x 256 with
-        // 16-bit stereo slots; at 8 kHz the BCLK must be at least 512 kHz
-        // (32-bit slots), so x4.
-        let multi: u8 = if rate == 8000 { 2 } else { 3 };
+        // Pre-divider and multiplier. Without an MCLK pin the codec
+        // multiplies the bit clock up to MCLK = LRCK x 256: x8 from
+        // 16-bit stereo slots (32 fs), x4 from 32-bit slots (64 fs).
         self.update(Reg::Clk02, |v| {
             (v & 0x07) | ((coeff.pre_div - 1) << 5) | (multi << 3)
         })?;
@@ -625,6 +644,41 @@ mod tests {
         let mut i2c = Mock::new(&[]);
         let mut c = Es8311::new(i2c.clone());
         assert_eq!(c.set_format(88_200, 16), Err(Error::Unsupported));
+        assert_eq!(
+            c.set_format_in_slots(44_100, 16, 24),
+            Err(Error::Unsupported)
+        );
+        c.release();
+        i2c.done();
+    }
+
+    #[test]
+    fn sixteen_bit_data_in_32_bit_slots_multiplies_bclk_x4() {
+        let mut i2c = Mock::new(&[
+            r(0x09, 0x00),
+            w(0x09, 0x0C),
+            r(0x0A, 0x00),
+            w(0x0A, 0x0C),
+            r(0x09, 0x0C),
+            w(0x09, 0x0C),
+            r(0x0A, 0x0C),
+            w(0x0A, 0x0C),
+            // pre_div 1 -> 0 << 5; multi x4 -> 2 << 3 = 0x10.
+            r(0x02, 0x00),
+            w(0x02, 0x10),
+            w(0x05, 0x00),
+            r(0x03, 0x80),
+            w(0x03, 0x80 | 0x10),
+            r(0x04, 0x00),
+            w(0x04, 0x10),
+            r(0x07, 0xFF),
+            w(0x07, 0xC0),
+            w(0x08, 0xFF),
+            r(0x06, 0x20),
+            w(0x06, 0x23),
+        ]);
+        let mut c = Es8311::new(i2c.clone());
+        c.set_format_in_slots(44_100, 16, 32).unwrap();
         c.release();
         i2c.done();
     }
